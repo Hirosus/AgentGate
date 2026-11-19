@@ -25,6 +25,7 @@ packages/mcp-server/dist-test/
 # AWS SAM / Cloud
 .aws-sam/
 samconfig.toml
+infra/build/
 
 # Next.js dashboard
 .next/

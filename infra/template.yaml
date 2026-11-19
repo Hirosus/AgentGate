@@ -42,8 +42,10 @@ Resources:
   WebhookIntakeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../packages/python-sdk/
+      CodeUri: build/lambda/
       Handler: agentgate.aws_lambda.handler
+      Architectures:
+        - x86_64
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref IdempotencyTable

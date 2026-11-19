@@ -1,0 +1,94 @@
+"""Zero-Docker AWS Lambda x86_64 (Linux) deployment bundle builder."""
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_OUTPUT = _REPO_ROOT / "infra" / "build" / "lambda"
+_SDK_PACKAGE_DIR = _REPO_ROOT / "packages" / "python-sdk" / "src" / "agentgate"
+
+
+def build_lambda_bundle(output_dir: Path) -> tuple[int, float]:
+    """Install Linux x86_64 runtime wheels and copy AgentGate SDK sources into `output_dir`."""
+    if not _SDK_PACKAGE_DIR.is_dir():
+        raise FileNotFoundError(f"AgentGate SDK directory not found: {_SDK_PACKAGE_DIR}")
+
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    uv_bin = shutil.which("uv") or "uv"
+    cmd = [
+        uv_bin,
+        "pip",
+        "install",
+        "--target",
+        str(output_dir),
+        "--python-platform",
+        "x86_64-manylinux2014",
+        "--python-version",
+        "3.11",
+        "--only-binary=:all:",
+        "pydantic>=2.7.0",
+        "httpx>=0.27.0",
+    ]
+    subprocess.run(cmd, check=True)
+
+    target_pkg = output_dir / "agentgate"
+    shutil.copytree(
+        _SDK_PACKAGE_DIR,
+        target_pkg,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+
+    entrypoint = target_pkg / "aws_lambda.py"
+    if not entrypoint.is_file():
+        raise RuntimeError(f"Missing Lambda handler module: {entrypoint}")
+
+    linux_binaries = list((output_dir / "pydantic_core").glob("_pydantic_core*.so"))
+    if not linux_binaries:
+        raise RuntimeError(
+            "Missing Linux x86_64 pydantic_core shared library (_pydantic_core*.so)."
+        )
+
+    windows_binaries = list(output_dir.rglob("*.pyd"))
+    if windows_binaries:
+        names = ", ".join(str(p.relative_to(output_dir)) for p in windows_binaries[:5])
+        raise RuntimeError(f"Unexpected Windows .pyd binaries found in Lambda bundle: {names}")
+
+    files = [p for p in output_dir.rglob("*") if p.is_file()]
+    total_mb = sum(p.stat().st_size for p in files) / (1024 * 1024)
+    return len(files), total_mb
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint for building the Linux x86_64 AWS SAM deployment bundle."""
+    parser = argparse.ArgumentParser(
+        description="Build zero-Docker Linux x86_64 Lambda bundle for AWS SAM.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=_DEFAULT_OUTPUT,
+        help="Destination directory for assembled Lambda bundle (default: infra/build/lambda).",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        file_count, total_mb = build_lambda_bundle(Path(args.output))
+    except Exception as exc:
+        print(f"Lambda bundle build failed: {exc}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Built AWS Lambda Linux x86_64 bundle at {args.output} "
+        f"({file_count} files, {total_mb:.2f} MB)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

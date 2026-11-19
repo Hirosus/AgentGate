@@ -2,6 +2,8 @@
 
 import base64
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -224,3 +226,19 @@ def test_default_module_handler_initializes_from_environment(
         assert res["body"] == '{"status": "ok"}'
     finally:
         reset_default_handler()
+
+
+def test_sam_template_contract_matches_linux_lambda_bundle() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    template_path = repo_root / "infra" / "template.yaml"
+    text = template_path.read_text(encoding="utf-8")
+
+    assert "Runtime: python3.11" in text
+    assert re.search(r"Architectures:\s*\n\s*-\s*x86_64", text) is not None
+    assert "CodeUri: build/lambda/" in text
+    assert "Handler: agentgate.aws_lambda.handler" in text
+    assert "AGENTGATE_STORE_BACKEND: dynamodb" in text
+    assert "IDEMPOTENCY_TABLE: !Ref IdempotencyTable" in text
+    assert "REPORTS_BUCKET: !Ref EvalReportsBucket" in text
+    assert "Path: /health" in text
+    assert "Path: /webhooks/triage" in text
