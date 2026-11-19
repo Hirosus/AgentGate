@@ -53,13 +53,22 @@ async def evaluate_suite(
     active_thresholds = thresholds if thresholds is not None else GateThresholds()
 
     results: list[EvalCaseResult] = []
+    baseline_latencies: list[float] = []
     tool_latencies: list[float] = []
+    baseline_schema_flags: list[bool] = []
+    baseline_adversarial_blocked: list[bool] = []
 
     for scenario in scenarios:
         base_start = time.perf_counter()
         base_out = await baseline_runner.run(scenario)
         base_ms = (time.perf_counter() - base_start) * 1000.0
         base_passed = active_judge.score(scenario, base_out)
+        base_tokens = base_out.input_tokens + base_out.output_tokens
+
+        baseline_latencies.append(base_ms)
+        baseline_schema_flags.append(base_out.schema_valid)
+        if scenario.is_adversarial_injection:
+            baseline_adversarial_blocked.append(not base_out.followed_untrusted_instruction)
 
         if trace_sink is not None:
             trace_sink.emit(
@@ -69,7 +78,7 @@ async def evaluate_suite(
                     passed=base_passed,
                     latency_ms=base_ms,
                     tool_calls=base_out.tool_calls,
-                    total_tokens=base_out.input_tokens + base_out.output_tokens,
+                    total_tokens=base_tokens,
                 )
             )
 
@@ -106,6 +115,13 @@ async def evaluate_suite(
                 tool_schema_valid=tool_out.schema_valid,
                 injection_blocked=injection_blocked,
                 total_tokens=tool_tokens,
+                baseline_severity=base_out.severity,
+                baseline_runbook=base_out.recommended_runbook,
+                baseline_tokens=base_tokens,
+                tool_severity=tool_out.severity,
+                tool_runbook=tool_out.recommended_runbook,
+                tool_calls=tool_out.tool_calls,
+                tool_pacing_wait_ms=tool_out.pacing_wait_ms,
             )
         )
 
@@ -122,11 +138,17 @@ async def evaluate_suite(
             passed_ci_gate=False,
             gate_failures=("No evaluation scenarios provided.",),
             results=(),
+            baseline_schema_valid_rate=1.0,
+            baseline_injection_block_rate=1.0,
+            p95_baseline_latency_ms=0.0,
+            baseline_total_tokens=0,
+            p95_tool_net_latency_ms=0.0,
         )
 
     baseline_rate = sum(1 for r in results if r.baseline_passed) / total
     tool_rate = sum(1 for r in results if r.tool_passed) / total
     schema_rate = sum(1 for r in results if r.tool_schema_valid) / total
+    baseline_schema_rate = sum(1 for ok in baseline_schema_flags if ok) / total
     adversarial_results = [
         r for r, s in zip(results, scenarios, strict=True) if s.is_adversarial_injection
     ]
@@ -135,7 +157,16 @@ async def evaluate_suite(
         if not adversarial_results
         else sum(1 for r in adversarial_results if r.injection_blocked) / len(adversarial_results)
     )
+    baseline_injection_rate = (
+        1.0
+        if not baseline_adversarial_blocked
+        else sum(1 for ok in baseline_adversarial_blocked if ok)
+        / len(baseline_adversarial_blocked)
+    )
+    p95_baseline_latency = _p95(baseline_latencies)
     p95_latency = _p95(tool_latencies)
+    p95_net_latency = _p95([max(0.0, r.tool_latency_ms - r.tool_pacing_wait_ms) for r in results])
+    baseline_total_tokens = sum(r.baseline_tokens for r in results)
     total_tokens = sum(r.total_tokens for r in results)
 
     failures: list[str] = []
@@ -173,4 +204,9 @@ async def evaluate_suite(
         passed_ci_gate=len(failures) == 0,
         gate_failures=tuple(failures),
         results=tuple(results),
+        baseline_schema_valid_rate=baseline_schema_rate,
+        baseline_injection_block_rate=baseline_injection_rate,
+        p95_baseline_latency_ms=p95_baseline_latency,
+        baseline_total_tokens=baseline_total_tokens,
+        p95_tool_net_latency_ms=p95_net_latency,
     )

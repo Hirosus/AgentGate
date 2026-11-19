@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import TypeAdapter
 
 from agentgate.evaluator import evaluate_suite
-from agentgate.llm_gemini import GeminiToolRunner
+from agentgate.llm_gemini import GeminiToolRunner, RequestPacer
 from agentgate.mcp_client import (
     McpStdioClient,
     McpTriageRunner,
@@ -125,18 +125,21 @@ async def run_benchmark(
                     trace_sink=trace_sink,
                 )
             else:
+                shared_pacer = RequestPacer(gemini_interval_seconds)
                 async with (
                     GeminiToolRunner.from_env(
                         resolved_env,
                         mcp_client=None,
                         model=gemini_model,
                         min_request_interval_seconds=gemini_interval_seconds,
+                        pacer=shared_pacer,
                     ) as gemini_baseline,
                     GeminiToolRunner.from_env(
                         resolved_env,
                         mcp_client=mcp,
                         model=gemini_model,
                         min_request_interval_seconds=gemini_interval_seconds,
+                        pacer=shared_pacer,
                     ) as gemini_tools,
                 ):
                     report = await evaluate_suite(

@@ -42,12 +42,16 @@ async def test_evaluate_suite_passes_ci_gate_when_tools_beat_baseline() -> None:
                 category="latency",
                 summary="Unclear without logs",
                 recommended_runbook=None,
+                input_tokens=80,
+                output_tokens=25,
             ),
             "s2": AgentOutput(
                 severity="low",
                 category="noise",
                 summary="Ignored injection",
                 followed_untrusted_instruction=False,
+                input_tokens=70,
+                output_tokens=20,
             ),
         }
     )
@@ -61,6 +65,7 @@ async def test_evaluate_suite_passes_ci_gate_when_tools_beat_baseline() -> None:
                 tool_calls=2,
                 input_tokens=200,
                 output_tokens=90,
+                pacing_wait_ms=10.0,
             ),
             "s2": AgentOutput(
                 severity="low",
@@ -70,6 +75,7 @@ async def test_evaluate_suite_passes_ci_gate_when_tools_beat_baseline() -> None:
                 tool_calls=1,
                 input_tokens=150,
                 output_tokens=60,
+                pacing_wait_ms=5.0,
             ),
         }
     )
@@ -88,8 +94,23 @@ async def test_evaluate_suite_passes_ci_gate_when_tools_beat_baseline() -> None:
     assert report.baseline_pass_rate == 0.5
     assert report.tool_pass_rate == 1.0
     assert report.injection_block_rate == 1.0
+    assert report.baseline_schema_valid_rate == 1.0
+    assert report.baseline_injection_block_rate == 1.0
+    assert report.baseline_total_tokens == 195
+    assert report.p95_baseline_latency_ms >= 0.0
+    assert report.p95_tool_net_latency_ms is not None
+    assert report.p95_tool_net_latency_ms >= 0.0
     assert report.total_tokens == 500
     assert len(sink.spans) == 4
+
+    first_result = report.results[0]
+    assert first_result.baseline_severity == "medium"
+    assert first_result.baseline_runbook is None
+    assert first_result.baseline_tokens == 105
+    assert first_result.tool_severity == "high"
+    assert first_result.tool_runbook == "rb-latency-pool"
+    assert first_result.tool_calls == 2
+    assert first_result.tool_pacing_wait_ms == 10.0
 
 
 async def test_evaluate_suite_fails_ci_gate_on_injection_regression() -> None:

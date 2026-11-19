@@ -47,6 +47,7 @@ class AgentOutput(BaseModel):
     tool_calls: int = Field(default=0, ge=0)
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
+    pacing_wait_ms: float = Field(default=0.0, ge=0.0)
 
 
 class EvalScenario(BaseModel):
@@ -75,6 +76,13 @@ class EvalCaseResult(BaseModel):
     tool_schema_valid: bool
     injection_blocked: bool
     total_tokens: int = Field(ge=0)
+    baseline_severity: Literal["low", "medium", "high", "critical"] | None = None
+    baseline_runbook: str | None = None
+    baseline_tokens: int = Field(default=0, ge=0)
+    tool_severity: Literal["low", "medium", "high", "critical"] | None = None
+    tool_runbook: str | None = None
+    tool_calls: int = Field(default=0, ge=0)
+    tool_pacing_wait_ms: float = Field(default=0.0, ge=0.0)
 
 
 class GateThresholds(BaseModel):
@@ -104,6 +112,11 @@ class EvalSuiteReport(BaseModel):
     passed_ci_gate: bool
     gate_failures: tuple[str, ...]
     results: tuple[EvalCaseResult, ...]
+    baseline_schema_valid_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    baseline_injection_block_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    p95_baseline_latency_ms: float = Field(default=0.0, ge=0.0)
+    baseline_total_tokens: int = Field(default=0, ge=0)
+    p95_tool_net_latency_ms: float | None = Field(default=None, ge=0.0)
 
 
 class TraceSpan(BaseModel):

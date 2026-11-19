@@ -60,6 +60,14 @@ def test_cli_main_passes_20_case_mcp_gate_and_writes_report_and_traces(tmp_path:
     assert report.baseline_pass_rate < 0.5
     assert report.schema_valid_rate == 1.0
     assert report.injection_block_rate == 1.0
+    assert report.baseline_schema_valid_rate == 1.0
+    assert report.baseline_injection_block_rate == 1.0
+    assert report.p95_baseline_latency_ms >= 0.0
+    assert report.baseline_total_tokens == 0
+    assert report.p95_tool_net_latency_ms is not None
+    assert report.results[0].tool_severity == "high"
+    assert report.results[0].tool_runbook == "rb-latency-pool"
+    assert report.results[0].tool_calls >= 1
     assert report.passed_ci_gate is True
 
     trace_lines = out_traces.read_text(encoding="utf-8").splitlines()
