@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AgentGate serverless webhook intake, DynamoDB idempotency store, and S3 eval artifacts
+
+Globals:
+  Function:
+    Timeout: 15
+    MemorySize: 256
+    Runtime: python3.11
+
+Resources:
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: idempotency_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: idempotency_key
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+
+  EvalReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  WebhookIntakeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../packages/python-sdk/
+      Handler: agentgate.aws_lambda.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref IdempotencyTable
+        - S3WritePolicy:
+            BucketName: !Ref EvalReportsBucket
+      Environment:
+        Variables:
+          IDEMPOTENCY_TABLE: !Ref IdempotencyTable
+          REPORTS_BUCKET: !Ref EvalReportsBucket
+      Events:
+        TriageWebhook:
+          Type: HttpApi
+          Properties:
+            Path: /webhooks/triage
+            Method: POST
+
+Outputs:
+  WebhookEndpointUrl:
+    Description: HTTP API endpoint URL for signed AgentGate webhooks
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/webhooks/triage"

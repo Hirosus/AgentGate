@@ -1,0 +1,69 @@
+{
+  "name": "AgentGate Signed Webhook Triage",
+  "nodes": [
+    {
+      "id": "trigger-alert",
+      "name": "Alert Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agentgate-source-alert",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "sign-payload",
+      "name": "Compute Timestamp & HMAC-SHA256",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "secret": "={{ $env.AGENTGATE_WEBHOOK_SECRET }}",
+        "value": "={{ $now.toUnixInteger() + '.' + JSON.stringify($json) }}"
+      }
+    },
+    {
+      "id": "post-agentgate",
+      "name": "POST to AgentGate Ingress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.AGENTGATE_BASE_URL + '/webhooks/triage' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-AgentGate-Timestamp",
+              "value": "={{ String($now.toUnixInteger()) }}"
+            },
+            {
+              "name": "X-AgentGate-Idempotency-Key",
+              "value": "={{ $execution.id }}"
+            },
+            {
+              "name": "X-AgentGate-Signature",
+              "value": "={{ 'v1=' + $json.data }}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Alert Trigger": {
+      "main": [[{ "node": "Compute Timestamp & HMAC-SHA256", "type": "main", "index": 0 }]]
+    },
+    "Compute Timestamp & HMAC-SHA256": {
+      "main": [[{ "node": "POST to AgentGate Ingress", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "errorWorkflow": "agentgate-error-handler"
+  }
+}
