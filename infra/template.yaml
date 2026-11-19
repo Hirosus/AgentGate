@@ -2,6 +2,13 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: AgentGate serverless webhook intake, DynamoDB idempotency store, and S3 eval artifacts
 
+Parameters:
+  WebhookSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: Shared HMAC-SHA256 secret for AgentGate webhook verification
+
 Globals:
   Function:
     Timeout: 15
@@ -44,9 +51,17 @@ Resources:
             BucketName: !Ref EvalReportsBucket
       Environment:
         Variables:
+          AGENTGATE_WEBHOOK_SECRET: !Ref WebhookSecret
+          AGENTGATE_STORE_BACKEND: dynamodb
+          AGENTGATE_WEBHOOK_MAX_AGE_SECONDS: "300"
           IDEMPOTENCY_TABLE: !Ref IdempotencyTable
           REPORTS_BUCKET: !Ref EvalReportsBucket
       Events:
+        HealthCheck:
+          Type: HttpApi
+          Properties:
+            Path: /health
+            Method: GET
         TriageWebhook:
           Type: HttpApi
           Properties:
@@ -54,6 +69,9 @@ Resources:
             Method: POST
 
 Outputs:
+  HealthEndpointUrl:
+    Description: HTTP API health check endpoint URL for AgentGate
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/health"
   WebhookEndpointUrl:
     Description: HTTP API endpoint URL for signed AgentGate webhooks
     Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/webhooks/triage"
