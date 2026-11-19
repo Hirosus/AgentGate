@@ -29,6 +29,8 @@ samconfig.toml
 # Next.js dashboard
 .next/
 out/
+next-env.d.ts
 
 # Local planning notes & session handoffs (never commit)
 .local/
+.taste-skill/
