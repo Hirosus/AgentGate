@@ -2,6 +2,12 @@
 
 from agentgate.client import AgentGateClient, AsyncAgentGateClient
 from agentgate.evaluator import evaluate_suite
+from agentgate.ingress import (
+    HttpResponse,
+    IngressConfig,
+    WebhookIngress,
+    create_ingress_from_env,
+)
 from agentgate.seams import (
     EvalJudge,
     IdempotencyStore,
@@ -39,9 +45,11 @@ __all__ = [
     "EvalScenario",
     "EvalSuiteReport",
     "GateThresholds",
+    "HttpResponse",
     "IdempotencyStore",
     "InMemoryIdempotencyStore",
     "InMemoryTraceSink",
+    "IngressConfig",
     "IntakeDecision",
     "IntakeStatus",
     "SqliteIdempotencyStore",
@@ -49,6 +57,8 @@ __all__ = [
     "TraceSink",
     "TraceSpan",
     "WebhookEvent",
+    "WebhookIngress",
+    "create_ingress_from_env",
     "evaluate_suite",
     "ingest_webhook",
     "sign_payload",

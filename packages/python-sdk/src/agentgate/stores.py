@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import TracebackType
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
 def _default_now() -> int:
@@ -106,6 +106,7 @@ class SqliteIdempotencyStore:
             return claimed
 
 
+@runtime_checkable
 class DynamoDbTableProtocol(Protocol):
     """Structural interface matching a boto3 DynamoDB Table resource's put_item method."""
 
