@@ -15,13 +15,23 @@ export const CheckLatencyBudgetSchema = {
 };
 
 export const LookupRunbookSchema = {
-  symptomTag: z.enum(["db_pool_exhaustion", "webhook_timeout", "auth_failure", "vlan_packet_loss"]),
+  symptomTag: z.enum([
+    "db_pool_exhaustion",
+    "webhook_timeout",
+    "auth_failure",
+    "vlan_packet_loss",
+    "tls_cert_expiry",
+    "redis_eviction_spike",
+    "dns_resolution_failure",
+    "lambda_oom_throttle",
+  ]),
 };
 
 export interface LogInspectionResult {
   readonly service: string;
   readonly lines: readonly string[];
   readonly truncated: boolean;
+  readonly untrustedTelemetry: boolean;
 }
 
 export interface LatencyBudgetResult {
