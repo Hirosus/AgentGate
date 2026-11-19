@@ -8,6 +8,12 @@ from agentgate.ingress import (
     WebhookIngress,
     create_ingress_from_env,
 )
+from agentgate.llm_gemini import (
+    GeminiApiError,
+    GeminiConfig,
+    GeminiToolRunner,
+    sanitize_gemini_schema,
+)
 from agentgate.mcp_client import (
     McpClientProtocol,
     McpProtocolError,
@@ -54,6 +60,9 @@ __all__ = [
     "EvalScenario",
     "EvalSuiteReport",
     "GateThresholds",
+    "GeminiApiError",
+    "GeminiConfig",
+    "GeminiToolRunner",
     "HttpResponse",
     "IdempotencyStore",
     "InMemoryIdempotencyStore",
@@ -77,6 +86,7 @@ __all__ = [
     "default_mcp_server_entrypoint",
     "evaluate_suite",
     "ingest_webhook",
+    "sanitize_gemini_schema",
     "sign_payload",
     "verify_signature",
 ]
