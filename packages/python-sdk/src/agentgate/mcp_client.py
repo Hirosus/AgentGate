@@ -109,12 +109,7 @@ _SYMPTOM_RULES: tuple[tuple[str, tuple[str, ...], _Severity], ...] = (
     ),
     (
         "dns_resolution_failure",
-        (
-            "coredns",
-            "servfail",
-            "dns",
-            "resolv",
-        ),
+        ("__deliberate_regression_disabled__",),
         "high",
     ),
     (
