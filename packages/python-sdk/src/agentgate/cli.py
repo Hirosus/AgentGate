@@ -48,6 +48,27 @@ def load_scenarios(path: str | Path) -> tuple[EvalScenario, ...]:
     return tuple(_SCENARIO_LIST_ADAPTER.validate_json(raw))
 
 
+def load_dotenv_file(path: Path) -> dict[str, str]:
+    """Parse key=value pairs from a dotenv file, stripping matching surrounding quotes."""
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        cleaned_key = key.strip()
+        cleaned_val = value.strip()
+        if (
+            len(cleaned_val) >= 2
+            and cleaned_val[0] == cleaned_val[-1]
+            and cleaned_val[0] in ("'", '"')
+        ):
+            cleaned_val = cleaned_val[1:-1]
+        if cleaned_key:
+            values[cleaned_key] = cleaned_val
+    return values
+
+
 async def run_benchmark(
     *,
     scenarios_path: Path,
@@ -57,11 +78,15 @@ async def run_benchmark(
     thresholds: GateThresholds | None = None,
     mcp_server_path: Path | None = None,
     env: Mapping[str, str] | None = None,
+    env_file: Path | None = None,
+    gemini_model: str | None = None,
     gemini_interval_seconds: float = 4.5,
 ) -> EvalSuiteReport:
     """Execute paired baseline vs. tool evaluation, emit traces/report, and return the report."""
     scenarios = load_scenarios(scenarios_path)
-    resolved_env: Mapping[str, str] = os.environ if env is None else env
+    base_env: Mapping[str, str] = os.environ if env is None else env
+    dotenv_values = load_dotenv_file(env_file) if env_file is not None else {}
+    resolved_env: dict[str, str] = {**dotenv_values, **base_env}
     server_js = (
         mcp_server_path if mcp_server_path is not None else default_mcp_server_entrypoint()
     )
@@ -104,11 +129,13 @@ async def run_benchmark(
                     GeminiToolRunner.from_env(
                         resolved_env,
                         mcp_client=None,
+                        model=gemini_model,
                         min_request_interval_seconds=gemini_interval_seconds,
                     ) as gemini_baseline,
                     GeminiToolRunner.from_env(
                         resolved_env,
                         mcp_client=mcp,
+                        model=gemini_model,
                         min_request_interval_seconds=gemini_interval_seconds,
                     ) as gemini_tools,
                 ):
@@ -178,6 +205,18 @@ def _build_parser() -> argparse.ArgumentParser:
         default=4.5,
         help="Minimum interval in seconds between live Gemini requests.",
     )
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        default=None,
+        help="Optional dotenv file merged beneath process environment variables.",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Override Gemini model name (defaults to GEMINI_MODEL or gemini-3.1-flash-lite).",
+    )
     return parser
 
 
@@ -198,6 +237,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             traces_path=Path(args.traces),
             mode=mode,
             thresholds=thresholds,
+            env_file=args.env_file,
+            gemini_model=args.model,
             gemini_interval_seconds=float(args.interval),
         )
     )

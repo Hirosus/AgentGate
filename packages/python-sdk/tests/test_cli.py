@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agentgate.cli import load_scenarios, main
+from agentgate.cli import load_dotenv_file, load_scenarios, main
 from agentgate.types import EvalSuiteReport
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -89,3 +89,20 @@ def test_cli_main_returns_nonzero_when_ci_gate_fails(tmp_path: Path) -> None:
     report = EvalSuiteReport.model_validate_json(out_report.read_text(encoding="utf-8"))
     assert report.passed_ci_gate is False
     assert any("p95_latency_ms" in failure for failure in report.gate_failures)
+
+
+def test_load_dotenv_file_parses_values_and_preserves_os_env_precedence(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "# Comment line\n"
+        "\n"
+        "GEMINI_MODEL=gemini-3.1-flash-lite\n"
+        'GEMINI_API_KEY="quoted-secret"\n',
+        encoding="utf-8",
+    )
+
+    parsed = load_dotenv_file(env_path)
+    assert parsed == {
+        "GEMINI_MODEL": "gemini-3.1-flash-lite",
+        "GEMINI_API_KEY": "quoted-secret",
+    }

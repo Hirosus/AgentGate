@@ -130,7 +130,7 @@ async def test_gemini_baseline_mode_uses_header_auth_and_parses_json_output() ->
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured_requests.append(request)
-        assert request.url.path.endswith("/v1beta/models/gemini-2.5-flash:generateContent")
+        assert request.url.path.endswith("/v1beta/models/gemini-3.1-flash-lite:generateContent")
         assert not request.url.query
         assert request.headers["x-goog-api-key"] == "test-gemini-key"
 
@@ -490,17 +490,29 @@ async def test_gemini_from_env_validation() -> None:
 
     default_runner = GeminiToolRunner.from_env({"GEMINI_API_KEY": "env-key"})
     try:
-        assert default_runner.model == "gemini-2.5-flash"
+        assert default_runner.model == "gemini-3.1-flash-lite"
     finally:
         await default_runner.aclose()
 
     custom_runner = GeminiToolRunner.from_env(
         {
             "GEMINI_API_KEY": "env-key",
-            "GEMINI_MODEL": "gemini-2.5-flash-lite",
+            "GEMINI_MODEL": "gemini-3.5-flash",
         }
     )
     try:
-        assert custom_runner.model == "gemini-2.5-flash-lite"
+        assert custom_runner.model == "gemini-3.5-flash"
     finally:
         await custom_runner.aclose()
+
+    override_runner = GeminiToolRunner.from_env(
+        {
+            "GEMINI_API_KEY": "env-key",
+            "GEMINI_MODEL": "gemini-3.1-flash-lite",
+        },
+        model="gemini-3.5-flash",
+    )
+    try:
+        assert override_runner.model == "gemini-3.5-flash"
+    finally:
+        await override_runner.aclose()

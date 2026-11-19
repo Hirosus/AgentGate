@@ -42,7 +42,7 @@ class GeminiConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     api_key: str = Field(min_length=1)
-    model: str = Field(default="gemini-2.5-flash", min_length=1)
+    model: str = Field(default="gemini-3.1-flash-lite", min_length=1)
     base_url: str = Field(
         default="https://generativelanguage.googleapis.com/v1beta",
         min_length=1,
@@ -214,17 +214,26 @@ class GeminiToolRunner:
         env: Mapping[str, str],
         *,
         mcp_client: McpClientProtocol | None = None,
+        model: str | None = None,
         min_request_interval_seconds: float = 4.5,
+        max_retries: int = 5,
+        initial_backoff_seconds: float = 2.0,
     ) -> "GeminiToolRunner":
         """Build a GeminiToolRunner from environment variables."""
         api_key = env.get("GEMINI_API_KEY", "").strip()
         if not api_key:
             raise ValueError("GEMINI_API_KEY must be set.")
-        model = env.get("GEMINI_MODEL", "").strip() or "gemini-2.5-flash"
+        resolved_model = (
+            (model.strip() if model is not None else "")
+            or env.get("GEMINI_MODEL", "").strip()
+            or "gemini-3.1-flash-lite"
+        )
         config = GeminiConfig(
             api_key=api_key,
-            model=model,
+            model=resolved_model,
             min_request_interval_seconds=min_request_interval_seconds,
+            max_retries=max_retries,
+            initial_backoff_seconds=initial_backoff_seconds,
         )
         return cls(config=config, mcp_client=mcp_client)
 
