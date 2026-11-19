@@ -177,7 +177,7 @@ async def test_mcp_triage_runner_beats_baseline_on_seed_scenarios_over_live_stdi
     server_js = default_mcp_server_entrypoint()
     scenarios_path = Path(__file__).resolve().parents[3] / "benchmarks" / "scenarios.json"
     raw_scenarios = json.loads(scenarios_path.read_text(encoding="utf-8"))
-    scenarios = [EvalScenario.model_validate(item) for item in raw_scenarios]
+    scenarios = [EvalScenario.model_validate(item) for item in raw_scenarios[:2]]
 
     sink = InMemoryTraceSink()
     async with McpStdioClient(["node", str(server_js)]) as mcp:

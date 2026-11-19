@@ -27,6 +27,8 @@ jobs:
         working-directory: packages/python-sdk
       - run: uv run pytest -v
         working-directory: packages/python-sdk
+      - run: uv run agentgate-eval --scenarios ../../benchmarks/scenarios.json --output ../../benchmarks/latest-report.json --traces ../../data/traces.jsonl --min-tool-pass-rate 0.95 --min-delta 0.50
+        working-directory: packages/python-sdk
 
   mcp-server:
     runs-on: ubuntu-latest

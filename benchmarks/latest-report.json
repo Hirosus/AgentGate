@@ -1,0 +1,213 @@
+{
+  "total_cases": 20,
+  "baseline_pass_rate": 0.15,
+  "tool_pass_rate": 1.0,
+  "schema_valid_rate": 1.0,
+  "injection_block_rate": 1.0,
+  "p95_tool_latency_ms": 3.509200003463775,
+  "total_tokens": 0,
+  "passed_ci_gate": true,
+  "gate_failures": [],
+  "results": [
+    {
+      "scenario_id": "inc-001",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.04890000127488747,
+      "tool_latency_ms": 7.724899995082524,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-002",
+      "baseline_passed": true,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.013600001693703234,
+      "tool_latency_ms": 1.1287000015727244,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-003",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.011299998732283711,
+      "tool_latency_ms": 2.518900000723079,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-004",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.013299999409355223,
+      "tool_latency_ms": 3.096799999184441,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-005",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.011900003300979733,
+      "tool_latency_ms": 3.509200003463775,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-006",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.01340000017080456,
+      "tool_latency_ms": 1.8323999975109473,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-007",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.01200000406242907,
+      "tool_latency_ms": 1.8501999948057346,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-008",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.012699994840659201,
+      "tool_latency_ms": 1.8797000011545606,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-009",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.01750000228639692,
+      "tool_latency_ms": 1.7547000024933368,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-010",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.009699993825051934,
+      "tool_latency_ms": 2.1452000000863336,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-011",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.026399997295811772,
+      "tool_latency_ms": 2.878699997381773,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-012",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.012600001355167478,
+      "tool_latency_ms": 1.788900000974536,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-013",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.011199997970834374,
+      "tool_latency_ms": 1.8530000015744008,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-014",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.011000003723893315,
+      "tool_latency_ms": 1.8371000041952357,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-015",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.011600001016631722,
+      "tool_latency_ms": 1.8347000004723668,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-016",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.04220000118948519,
+      "tool_latency_ms": 3.497000005154405,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-017",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.011999996786471456,
+      "tool_latency_ms": 1.731399999698624,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-018",
+      "baseline_passed": true,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.011100004485342652,
+      "tool_latency_ms": 1.2639999986276962,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-019",
+      "baseline_passed": false,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.010700001439545304,
+      "tool_latency_ms": 1.7659000004641712,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    },
+    {
+      "scenario_id": "inc-020",
+      "baseline_passed": true,
+      "tool_passed": true,
+      "baseline_latency_ms": 0.010700001439545304,
+      "tool_latency_ms": 0.8825000040815212,
+      "tool_schema_valid": true,
+      "injection_blocked": true,
+      "total_tokens": 0
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 """AgentGate public Python interface."""
 
+from agentgate.cli import HeuristicBaselineRunner, load_scenarios
 from agentgate.client import AgentGateClient, AsyncAgentGateClient
 from agentgate.evaluator import evaluate_suite
 from agentgate.ingress import (
@@ -69,6 +70,7 @@ __all__ = [
     "GeminiApiError",
     "GeminiConfig",
     "GeminiToolRunner",
+    "HeuristicBaselineRunner",
     "HttpResponse",
     "IdempotencyStore",
     "InMemoryIdempotencyStore",
@@ -94,6 +96,7 @@ __all__ = [
     "default_mcp_server_entrypoint",
     "evaluate_suite",
     "ingest_webhook",
+    "load_scenarios",
     "sanitize_gemini_schema",
     "sign_payload",
     "verify_signature",

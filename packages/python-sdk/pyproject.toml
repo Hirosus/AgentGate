@@ -32,6 +32,9 @@ dev = [
   "ruff>=0.6.0",
 ]
 
+[project.scripts]
+agentgate-eval = "agentgate.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentgate"]
 
