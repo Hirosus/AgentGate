@@ -36,6 +36,11 @@ from agentgate.stores import (
     DynamoDbTableProtocol,
     SqliteIdempotencyStore,
 )
+from agentgate.tracing import (
+    CompositeTraceSink,
+    JsonlOtelTraceSink,
+    LangfuseTraceSink,
+)
 from agentgate.types import (
     AgentOutput,
     EvalCaseResult,
@@ -53,6 +58,7 @@ __all__ = [
     "AgentGateClient",
     "AgentOutput",
     "AsyncAgentGateClient",
+    "CompositeTraceSink",
     "DynamoDbIdempotencyStore",
     "DynamoDbTableProtocol",
     "EvalCaseResult",
@@ -70,6 +76,8 @@ __all__ = [
     "IngressConfig",
     "IntakeDecision",
     "IntakeStatus",
+    "JsonlOtelTraceSink",
+    "LangfuseTraceSink",
     "McpClientProtocol",
     "McpProtocolError",
     "McpStdioClient",
