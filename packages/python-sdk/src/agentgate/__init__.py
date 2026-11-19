@@ -10,6 +10,11 @@ from agentgate.seams import (
     ToolRunner,
     TraceSink,
 )
+from agentgate.stores import (
+    DynamoDbIdempotencyStore,
+    DynamoDbTableProtocol,
+    SqliteIdempotencyStore,
+)
 from agentgate.types import (
     AgentOutput,
     EvalCaseResult,
@@ -27,6 +32,8 @@ __all__ = [
     "AgentGateClient",
     "AgentOutput",
     "AsyncAgentGateClient",
+    "DynamoDbIdempotencyStore",
+    "DynamoDbTableProtocol",
     "EvalCaseResult",
     "EvalJudge",
     "EvalScenario",
@@ -37,6 +44,7 @@ __all__ = [
     "InMemoryTraceSink",
     "IntakeDecision",
     "IntakeStatus",
+    "SqliteIdempotencyStore",
     "ToolRunner",
     "TraceSink",
     "TraceSpan",
