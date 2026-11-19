@@ -18,7 +18,12 @@ interface JsonRpcResponse {
   readonly jsonrpc: string;
   readonly id?: number;
   readonly result?: {
-    readonly tools?: readonly { readonly name: string }[];
+    readonly tools?: readonly {
+      readonly name: string;
+      readonly inputSchema?: {
+        readonly properties?: Readonly<Record<string, { readonly description?: string }>>;
+      };
+    }[];
     readonly content?: readonly { readonly type: string; readonly text?: string }[];
     readonly isError?: boolean;
   };
@@ -193,12 +198,18 @@ describe("MCP stdio server integration", () => {
       );
 
       const listRes = await request(2, "tools/list", {});
-      const toolNames = (listRes.result?.tools ?? []).map((tool) => tool.name).sort();
+      const toolsList = listRes.result?.tools ?? [];
+      const toolNames = toolsList.map((tool) => tool.name).sort();
       assert.deepEqual(toolNames, [
         "check_latency_budget",
         "inspect_log_excerpt",
         "lookup_runbook",
       ]);
+
+      const lookupTool = toolsList.find((tool) => tool.name === "lookup_runbook");
+      const symptomDescription = lookupTool?.inputSchema?.properties?.symptomTag?.description ?? "";
+      assert.match(symptomDescription, /auth_failure/);
+      assert.match(symptomDescription, /webhook_timeout/);
 
       const logRes = await request(3, "tools/call", {
         name: "inspect_log_excerpt",

@@ -23,7 +23,7 @@ server.tool(
 
 server.tool(
   "check_latency_budget",
-  "Compare observed service p95 latency in milliseconds against its SLA budget.",
+  "Compare observed service p95 latency in milliseconds against its SLA budget and return the SLA-calibrated recommendedSeverity (low, medium, high, or critical).",
   CheckLatencyBudgetSchema,
   async ({ service, p95Ms }) => ({
     content: [{ type: "text", text: JSON.stringify(checkLatencyBudget(service, p95Ms)) }],
@@ -32,7 +32,7 @@ server.tool(
 
 server.tool(
   "lookup_runbook",
-  "Fetch the verified diagnostic checklist and runbook ID for an incident symptom category.",
+  "Fetch the verified runbookId and remediation checklist for one of the 8 symptom categories.",
   LookupRunbookSchema,
   async ({ symptomTag }) => ({
     content: [{ type: "text", text: JSON.stringify(lookupRunbook(symptomTag)) }],
