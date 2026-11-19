@@ -9,18 +9,24 @@ on:
 jobs:
   python-sdk:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/python-sdk
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci && npm run build
+        working-directory: packages/mcp-server
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
       - run: uv sync
+        working-directory: packages/python-sdk
       - run: uv run ruff check src tests
+        working-directory: packages/python-sdk
       - run: uv run mypy src tests
+        working-directory: packages/python-sdk
       - run: uv run pytest -v
+        working-directory: packages/python-sdk
 
   mcp-server:
     runs-on: ubuntu-latest
@@ -32,6 +38,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm install
+      - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - run: npm test

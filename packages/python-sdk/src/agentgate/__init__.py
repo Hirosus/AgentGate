@@ -8,6 +8,15 @@ from agentgate.ingress import (
     WebhookIngress,
     create_ingress_from_env,
 )
+from agentgate.mcp_client import (
+    McpClientProtocol,
+    McpProtocolError,
+    McpStdioClient,
+    McpToolCallResult,
+    McpToolDefinition,
+    McpTriageRunner,
+    default_mcp_server_entrypoint,
+)
 from agentgate.seams import (
     EvalJudge,
     IdempotencyStore,
@@ -52,6 +61,12 @@ __all__ = [
     "IngressConfig",
     "IntakeDecision",
     "IntakeStatus",
+    "McpClientProtocol",
+    "McpProtocolError",
+    "McpStdioClient",
+    "McpToolCallResult",
+    "McpToolDefinition",
+    "McpTriageRunner",
     "SqliteIdempotencyStore",
     "ToolRunner",
     "TraceSink",
@@ -59,6 +74,7 @@ __all__ = [
     "WebhookEvent",
     "WebhookIngress",
     "create_ingress_from_env",
+    "default_mcp_server_entrypoint",
     "evaluate_suite",
     "ingest_webhook",
     "sign_payload",
