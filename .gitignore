@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / TypeScript
+node_modules/
+packages/mcp-server/dist/
+*.tsbuildinfo
+
+# Secrets & local runtime state
+.env
+.env.local
+data/
+*.db
+*.sqlite3
+
+# AWS SAM / Cloud
+.aws-sam/
+samconfig.toml
+
+# Next.js dashboard
+.next/
+out/
+
+# Local planning notes & session handoffs (never commit)
+.local/
