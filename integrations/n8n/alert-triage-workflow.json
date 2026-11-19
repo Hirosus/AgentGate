@@ -14,16 +14,52 @@
       }
     },
     {
+      "id": "prepare-envelope",
+      "name": "Prepare Signing Envelope",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, 300],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-timestamp",
+              "name": "timestamp",
+              "value": "={{ String($now.toUnixInteger()) }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-idempotency-key",
+              "name": "idempotencyKey",
+              "value": "={{ ($json.body && $json.body.event_id) ? String($json.body.event_id) : 'n8n-' + $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-raw-body",
+              "name": "rawBody",
+              "value": "={{ JSON.stringify($json.body ?? $json) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false
+      }
+    },
+    {
       "id": "sign-payload",
-      "name": "Compute Timestamp & HMAC-SHA256",
+      "name": "Compute HMAC-SHA256",
       "type": "n8n-nodes-base.crypto",
       "typeVersion": 1,
-      "position": [480, 300],
+      "position": [720, 300],
       "parameters": {
         "action": "hmac",
         "type": "SHA256",
+        "encoding": "hex",
+        "dataPropertyName": "signature",
         "secret": "={{ $env.AGENTGATE_WEBHOOK_SECRET }}",
-        "value": "={{ $now.toUnixInteger() + '.' + JSON.stringify($json) }}"
+        "value": "={{ $json.timestamp + '.' + $json.rawBody }}"
       }
     },
     {
@@ -31,7 +67,7 @@
       "name": "POST to AgentGate Ingress",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [720, 300],
+      "position": [960, 300],
       "parameters": {
         "method": "POST",
         "url": "={{ $env.AGENTGATE_BASE_URL + '/webhooks/triage' }}",
@@ -39,27 +75,45 @@
         "headerParameters": {
           "parameters": [
             {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-AgentGate-Source",
+              "value": "n8n"
+            },
+            {
               "name": "X-AgentGate-Timestamp",
-              "value": "={{ String($now.toUnixInteger()) }}"
+              "value": "={{ $json.timestamp }}"
             },
             {
               "name": "X-AgentGate-Idempotency-Key",
-              "value": "={{ $execution.id }}"
+              "value": "={{ $json.idempotencyKey }}"
             },
             {
               "name": "X-AgentGate-Signature",
-              "value": "={{ 'v1=' + $json.data }}"
+              "value": "={{ 'v1=' + $json.signature }}"
             }
           ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.rawBody }}",
+        "options": {
+          "timeout": 10000
         }
       }
     }
   ],
   "connections": {
     "Alert Trigger": {
-      "main": [[{ "node": "Compute Timestamp & HMAC-SHA256", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Prepare Signing Envelope", "type": "main", "index": 0 }]]
     },
-    "Compute Timestamp & HMAC-SHA256": {
+    "Prepare Signing Envelope": {
+      "main": [[{ "node": "Compute HMAC-SHA256", "type": "main", "index": 0 }]]
+    },
+    "Compute HMAC-SHA256": {
       "main": [[{ "node": "POST to AgentGate Ingress", "type": "main", "index": 0 }]]
     }
   },
