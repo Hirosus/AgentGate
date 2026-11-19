@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "node scripts/sync-reports.mjs && next typegen && tsc --noEmit"
   },
   "dependencies": {
     "next": "^15.2.0",

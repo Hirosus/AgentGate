@@ -18,7 +18,7 @@ packages/mcp-server/dist-test/
 # Secrets & local runtime state
 .env
 .env.local
-data/
+/data/
 *.db
 *.sqlite3
 
