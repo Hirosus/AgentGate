@@ -68,15 +68,3 @@ npm install
 npm run typecheck
 npm run build
 ```
-
-### 3. Scoreboard UI (Week 2)
-
-The Next.js App Router + Tailwind CSS scoreboard under `packages/dashboard/` reads `benchmarks/latest-report.json` and OpenTelemetry trace spans (scaffolded in Week 2).
-
-## Interview Pack Checklist
-
-- [x] Deep-module architecture & interface contract documented ([ARCHITECTURE.md](ARCHITECTURE.md))
-- [ ] 20-scenario deterministic benchmark suite (including prompt-injection resistance)
-- [ ] Baseline vs. MCP-tool metric comparison published in README
-- [ ] Live AWS deployment endpoint + exported CI gate failure screenshot
-- [ ] Completed production failure log ([POSTMORTEM.md](POSTMORTEM.md)) and 2-minute demo walkthrough
