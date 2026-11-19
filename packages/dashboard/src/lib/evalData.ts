@@ -18,6 +18,13 @@ export interface EvalCaseResult {
   readonly tool_schema_valid: boolean;
   readonly injection_blocked: boolean;
   readonly total_tokens: number;
+  readonly baseline_severity?: SeverityLevel | null;
+  readonly baseline_runbook?: string | null;
+  readonly baseline_tokens?: number;
+  readonly tool_severity?: SeverityLevel | null;
+  readonly tool_runbook?: string | null;
+  readonly tool_calls?: number;
+  readonly tool_pacing_wait_ms?: number;
 }
 
 export interface EvalSuiteReport {
@@ -31,6 +38,11 @@ export interface EvalSuiteReport {
   readonly passed_ci_gate: boolean;
   readonly gate_failures: readonly string[];
   readonly results: readonly EvalCaseResult[];
+  readonly baseline_schema_valid_rate?: number | null;
+  readonly baseline_injection_block_rate?: number | null;
+  readonly p95_baseline_latency_ms?: number;
+  readonly baseline_total_tokens?: number;
+  readonly p95_tool_net_latency_ms?: number | null;
 }
 
 export interface MergedCaseRow extends EvalCaseResult {
@@ -260,6 +272,48 @@ function requireBoolean(obj: Record<string, unknown>, key: string): boolean {
   return val;
 }
 
+function optionalNumber(obj: Record<string, unknown>, key: string): number | undefined {
+  const val = obj[key];
+  if (val === undefined || val === null) {
+    return undefined;
+  }
+  if (typeof val !== "number" || Number.isNaN(val)) {
+    throw new Error(`Expected numeric optional field "${key}" in EvalSuiteReport JSON.`);
+  }
+  return val;
+}
+
+function optionalNullableString(
+  obj: Record<string, unknown>,
+  key: string,
+): string | null | undefined {
+  const val = obj[key];
+  if (val === undefined) {
+    return undefined;
+  }
+  if (val === null || typeof val === "string") {
+    return val;
+  }
+  throw new Error(`Expected string|null optional field "${key}" in EvalSuiteReport JSON.`);
+}
+
+function optionalSeverity(
+  obj: Record<string, unknown>,
+  key: string,
+): SeverityLevel | null | undefined {
+  const val = obj[key];
+  if (val === undefined) {
+    return undefined;
+  }
+  if (val === null) {
+    return null;
+  }
+  if (val === "low" || val === "medium" || val === "high" || val === "critical") {
+    return val;
+  }
+  throw new Error(`Expected SeverityLevel|null optional field "${key}" in EvalSuiteReport JSON.`);
+}
+
 export function parseUploadedReport(rawJson: string): EvalSuiteReport {
   let parsed: unknown;
   try {
@@ -285,7 +339,7 @@ export function parseUploadedReport(rawJson: string): EvalSuiteReport {
     if (typeof scenarioId !== "string" || scenarioId.trim().length === 0) {
       throw new Error(`Result entry at index ${idx} is missing "scenario_id".`);
     }
-    return {
+    const baseResult: EvalCaseResult = {
       scenario_id: scenarioId,
       baseline_passed: requireBoolean(item, "baseline_passed"),
       tool_passed: requireBoolean(item, "tool_passed"),
@@ -295,12 +349,35 @@ export function parseUploadedReport(rawJson: string): EvalSuiteReport {
       injection_blocked: requireBoolean(item, "injection_blocked"),
       total_tokens: requireNumber(item, "total_tokens"),
     };
+    const baselineSeverity = optionalSeverity(item, "baseline_severity");
+    const baselineRunbook = optionalNullableString(item, "baseline_runbook");
+    const baselineTokens = optionalNumber(item, "baseline_tokens");
+    const toolSeverity = optionalSeverity(item, "tool_severity");
+    const toolRunbook = optionalNullableString(item, "tool_runbook");
+    const toolCalls = optionalNumber(item, "tool_calls");
+    const toolPacingWaitMs = optionalNumber(item, "tool_pacing_wait_ms");
+    return {
+      ...baseResult,
+      ...(baselineSeverity !== undefined ? { baseline_severity: baselineSeverity } : {}),
+      ...(baselineRunbook !== undefined ? { baseline_runbook: baselineRunbook } : {}),
+      ...(baselineTokens !== undefined ? { baseline_tokens: baselineTokens } : {}),
+      ...(toolSeverity !== undefined ? { tool_severity: toolSeverity } : {}),
+      ...(toolRunbook !== undefined ? { tool_runbook: toolRunbook } : {}),
+      ...(toolCalls !== undefined ? { tool_calls: toolCalls } : {}),
+      ...(toolPacingWaitMs !== undefined ? { tool_pacing_wait_ms: toolPacingWaitMs } : {}),
+    };
   });
 
   const rawFailures = parsed.gate_failures;
   const gateFailures = Array.isArray(rawFailures)
     ? rawFailures.filter((item): item is string => typeof item === "string")
     : [];
+
+  const baselineSchemaValidRate = optionalNumber(parsed, "baseline_schema_valid_rate");
+  const baselineInjectionBlockRate = optionalNumber(parsed, "baseline_injection_block_rate");
+  const p95BaselineLatencyMs = optionalNumber(parsed, "p95_baseline_latency_ms");
+  const baselineTotalTokens = optionalNumber(parsed, "baseline_total_tokens");
+  const p95ToolNetLatencyMs = optionalNumber(parsed, "p95_tool_net_latency_ms");
 
   return {
     total_cases: requireNumber(parsed, "total_cases"),
@@ -313,6 +390,21 @@ export function parseUploadedReport(rawJson: string): EvalSuiteReport {
     passed_ci_gate: requireBoolean(parsed, "passed_ci_gate"),
     gate_failures: gateFailures,
     results,
+    ...(baselineSchemaValidRate !== undefined
+      ? { baseline_schema_valid_rate: baselineSchemaValidRate }
+      : {}),
+    ...(baselineInjectionBlockRate !== undefined
+      ? { baseline_injection_block_rate: baselineInjectionBlockRate }
+      : {}),
+    ...(p95BaselineLatencyMs !== undefined
+      ? { p95_baseline_latency_ms: p95BaselineLatencyMs }
+      : {}),
+    ...(baselineTotalTokens !== undefined
+      ? { baseline_total_tokens: baselineTotalTokens }
+      : {}),
+    ...(p95ToolNetLatencyMs !== undefined
+      ? { p95_tool_net_latency_ms: p95ToolNetLatencyMs }
+      : {}),
   };
 }
 

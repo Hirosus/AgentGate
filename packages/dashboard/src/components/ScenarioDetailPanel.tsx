@@ -76,6 +76,19 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
             <div className="mt-0.5 font-medium text-[var(--text)]">
               {row.expected_severity ?? "-"}
             </div>
+            {row.tool_severity && (
+              <div
+                className="mt-0.5 text-[12px]"
+                style={{
+                  color:
+                    row.expected_severity !== null && row.tool_severity !== row.expected_severity
+                      ? "var(--negative)"
+                      : "var(--muted)",
+                }}
+              >
+                MCP: {row.tool_severity}
+              </div>
+            )}
           </div>
           <div>
             <div className="text-[12px] text-[var(--muted)]">Expected runbook</div>
@@ -86,23 +99,55 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
                 <span className="text-[var(--muted)]">None</span>
               )}
             </div>
+            {row.tool_runbook !== undefined && (
+              <div
+                className="mt-0.5 text-[12px]"
+                style={{
+                  color:
+                    row.expected_runbook !== null && row.tool_runbook !== row.expected_runbook
+                      ? "var(--negative)"
+                      : "var(--muted)",
+                }}
+              >
+                MCP:{" "}
+                {row.tool_runbook ? (
+                  <code className="text-[12px]">{row.tool_runbook}</code>
+                ) : (
+                  "None"
+                )}
+              </div>
+            )}
           </div>
           <div>
             <div className="text-[12px] text-[var(--muted)]">Baseline outcome</div>
             <div className="num mt-0.5 font-medium text-[var(--text)]">
               {row.baseline_passed ? "Pass" : "Fail"} ({formatMs(row.baseline_latency_ms)})
             </div>
+            {row.baseline_severity && (
+              <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                Pred: {row.baseline_severity}
+              </div>
+            )}
           </div>
           <div>
             <div className="text-[12px] text-[var(--muted)]">MCP tool outcome</div>
             <div className="num mt-0.5 font-medium text-[var(--text)]">
               {row.tool_passed ? "Pass" : "Fail"} ({formatMs(row.tool_latency_ms)})
             </div>
+            {(row.tool_pacing_wait_ms ?? 0) > 0 && (
+              <div className="num mt-0.5 text-[12px] text-[var(--muted)]">
+                Net {formatMs(Math.max(0, row.tool_latency_ms - (row.tool_pacing_wait_ms ?? 0)))} ·{" "}
+                {formatMs(row.tool_pacing_wait_ms ?? 0)} pacing
+              </div>
+            )}
           </div>
           <div>
-            <div className="text-[12px] text-[var(--muted)]">Schema valid</div>
-            <div className="mt-0.5 font-medium text-[var(--text)]">
-              {row.tool_schema_valid ? "Yes" : "No"}
+            <div className="text-[12px] text-[var(--muted)]">Schema &amp; calls</div>
+            <div className="num mt-0.5 font-medium text-[var(--text)]">
+              {row.tool_schema_valid ? "Valid" : "Invalid"}
+              {row.tool_calls !== undefined
+                ? ` · ${row.tool_calls} MCP call${row.tool_calls === 1 ? "" : "s"}`
+                : ""}
             </div>
           </div>
           <div>

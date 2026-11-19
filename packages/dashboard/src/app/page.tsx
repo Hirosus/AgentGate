@@ -17,7 +17,8 @@ export default function HomePage() {
     {
       id: "gemini-live",
       label: "Gemini 3.1 Flash Lite",
-      subtitle: "Live free-tier REST run (2.5s pacing) against TypeScript MCP stdio server",
+      subtitle:
+        "Live free-tier REST run (shared 3.0s pacing + batched MCP tools) against TypeScript MCP stdio server",
       modelLabel: "gemini-3.1-flash-lite + MCP stdio",
       latencyGateMs: 20000,
       minToolPassRate: 0.85,
