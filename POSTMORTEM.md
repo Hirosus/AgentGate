@@ -4,6 +4,28 @@
 
 ## 1. Live LLM Benchmark (`gemini-3.1-flash-lite`, 20 Scenarios)
 
+### Run 2 — After Optimization (`dffc7ef` + Shared `RequestPacer`, Schema Clarifications & Batched Tool Prompt)
+
+Run command:
+```bash
+uv run agentgate-eval --mode gemini --model gemini-3.1-flash-lite --env-file ../../.env --scenarios ../../benchmarks/scenarios.json --output ../../benchmarks/gemini-report.json --traces ../../data/gemini-traces.jsonl --interval 3.0 --max-p95-ms 20000
+```
+
+Artifact: [`benchmarks/gemini-report.json`](benchmarks/gemini-report.json)
+
+| Metric | Baseline (No Tools) | MCP-Assisted (`GeminiToolRunner`) | Delta | Target Gate | Status |
+|---|---:|---:|---:|---|---|
+| Overall pass rate | 0.15 (3/20) | 1.00 (20/20) | +0.85 | >= 0.85 | PASS |
+| Schema-valid outputs | 1.00 (20/20) | 1.00 (20/20) | 0.00 | 1.00 | PASS |
+| Prompt-injection resistance | 1.00 (5/5) | 1.00 (5/5) | 0.00 | 1.00 | PASS |
+| p95 wall-clock latency (ms) | 7,840.0 ms | 13,777.8 ms | +5,937.9 ms | <= 20,000.0 ms | PASS |
+| p95 net latency (excl. pacing wait) | 7,840.0 ms | 7,793.8 ms | -46.1 ms | — | Measured |
+| Total tokens | 5,637 | 40,363 | +34,726 | — | Measured |
+
+- **Gate Result (`passed_ci_gate: true`):** Passed all CI gate checks (`gate_failures: []`). Sharing one `RequestPacer` across `gemini_baseline` and `gemini_tools`, clarifying `LookupRunbookSchema` symptom descriptions (`auth_failure` vs. `webhook_timeout`), and instructing Gemini to treat `check_latency_budget.recommendedSeverity` as SLA-calibrated raised live MCP accuracy from **0.85 (17/20) → 1.00 (20/20)** and cut p95 wall-clock latency from **42,665.2 ms → 13,777.8 ms** (`67.7%` reduction, with net non-pacing latency at `7,793.8 ms`).
+
+### Run 1 — Initial Baseline Live Run (Before Optimization, commit `4482f47`)
+
 Run command:
 ```bash
 uv run agentgate-eval --mode gemini --model gemini-3.1-flash-lite --env-file ../../.env --scenarios ../../benchmarks/scenarios.json --output ../../benchmarks/gemini-report.json --traces ../../data/gemini-traces.jsonl --interval 2.5 --max-p95-ms 20000
@@ -17,7 +39,7 @@ uv run agentgate-eval --mode gemini --model gemini-3.1-flash-lite --env-file ../
 | p95 latency (ms) | — | 42,665.2 ms | — | <= 20,000.0 ms | FAIL |
 | Total tool tokens | — | 25,449 | — | — | Measured |
 
-- **Gate Result (`passed_ci_gate: false`):** Failed on `p95_latency_ms 42665.2 > 20000.0` due to multi-turn tool calls combined with `2.5s` free-tier RPM pacing and `429`/`503` retry backoffs on tail runs (`inc-008`: 32,248.8 ms, `inc-012`: 44,092.5 ms, `inc-014`: 34,868.5 ms, `inc-019`: 42,665.2 ms).
+- **Gate Result (`passed_ci_gate: false`):** Failed on `p95_latency_ms 42665.2 > 20000.0` due to multi-turn tool calls combined with unshared `2.5s` free-tier RPM pacing and `429`/`503` retry backoffs on tail runs (`inc-008`: 32,248.8 ms, `inc-012`: 44,092.5 ms, `inc-014`: 34,868.5 ms, `inc-019`: 42,665.2 ms).
 - **Accuracy Delta:** Without tools, `gemini-3.1-flash-lite` passed only the 3 benign scenarios where `recommended_runbook` is `null` (`inc-002`, `inc-018`, `inc-020`). With live MCP tools over stdio, accuracy jumped from **15% to 85%** while preserving **100%** schema validity and **100%** resistance across all 5 adversarial prompt-injection cases.
 
 ---
@@ -29,9 +51,9 @@ Run artifact: [`benchmarks/latest-report.json`](benchmarks/latest-report.json) (
 | Metric | Baseline (No Tools) | MCP-Assisted (`McpTriageRunner`) | Delta | Target Gate | Status |
 |---|---:|---:|---:|---|---|
 | Overall pass rate | 0.15 (3/20) | 1.00 (20/20) | +0.85 | >= 0.95 | PASS |
-| Schema-valid outputs | — | 1.00 (20/20) | — | 1.00 | PASS |
-| Prompt-injection resistance | — | 1.00 (5/5) | — | 1.00 | PASS |
-| p95 latency (ms) | — | 3.5 ms | — | <= 4,000.0 ms | PASS |
+| Schema-valid outputs | 1.00 (20/20) | 1.00 (20/20) | 0.00 | 1.00 | PASS |
+| Prompt-injection resistance | 1.00 (5/5) | 1.00 (5/5) | 0.00 | 1.00 | PASS |
+| p95 latency (ms) | 0.05 ms | 3.8 ms | +3.7 ms | <= 4,000.0 ms | PASS |
 | Total tokens | 0 | 0 | 0 | — | Offline CI |
 
 ---
@@ -57,6 +79,14 @@ Run artifact: [`benchmarks/latest-report.json`](benchmarks/latest-report.json) (
 - **Regression Test:** `test_cli_main_passes_20_case_mcp_gate_and_writes_report_and_traces` in [`packages/python-sdk/tests/test_cli.py`](packages/python-sdk/tests/test_cli.py).
 
 ### Failure 4 — Live Gemini Free-Tier Latency Breach & 3 Misses (`inc-004`, `inc-005`, `inc-010`)
-- **Symptom:** The live 20-case `gemini-3.1-flash-lite` run failed the CI gate on p95 latency (`42,665.2 ms > 20,000.0 ms` under `2.5s` pacing) and scored `tool_passed: false` on 3 scenarios (`inc-004`, `inc-005` on `webhook-ingress`; `inc-010` on `auth-gateway`) despite `schema_valid: true` and `tool_calls == 2` recorded in `gemini-traces.jsonl`.
-- **Root Cause:** (1) Multi-turn tool calls multiplied by free-tier RPM pacing and exponential `429`/`503` retries pushed tail latency above 42s; (2) `EvalCaseResult` records pass/fail booleans without capturing per-case predicted `severity` / `recommended_runbook` fields, making post-run diagnosis of the 3 classification misses require re-running or enriching report diagnostics.
-- **Next Guardrail (Week 2):** Record predicted `severity`, `recommended_runbook`, and `category` in trace metadata / `EvalCaseResult` diagnostics, tune the system prompt around `webhook-ingress` (`rb-hmac-rotation`) vs. `auth-gateway` (`rb-tls-renewal`), and keep free-tier paced LLM evals separate from fast deterministic CI PR gates.
+- **Symptom:** Run 1 (`gemini-3.1-flash-lite`) failed the CI gate on p95 latency (`42,665.2 ms > 20,000.0 ms` under `2.5s` pacing) and scored `tool_passed: false` on 3 scenarios (`inc-004`, `inc-005` on `webhook-ingress`; `inc-010` on `auth-gateway`) despite `schema_valid: true` and `tool_calls == 2`.
+- **Root Cause:**
+  1. **Unshared Pacing Locks:** `gemini_baseline` and `gemini_tools` held independent `_request_lock` / `_last_request_at` timers in [`cli.py`](packages/python-sdk/src/agentgate/cli.py), so back-to-back baseline and tool turns tripped Gemini free-tier `429` exponential backoffs (`inc-012`: `44,092.5 ms`, `inc-019`: `42,665.2 ms`).
+  2. **Ambiguous Tool Schema Descriptions (`inc-004`, `inc-005`):** Live diagnostic probe showed Gemini called `lookup_runbook(symptomTag="webhook_timeout")` (`rb-webhook-retry`) instead of `auth_failure` (`rb-hmac-rotation`) because [`LookupRunbookSchema`](packages/mcp-server/src/schemas.ts) lacked `.describe(...)` disambiguating inbound HMAC/signature mismatches from outbound webhook delivery timeouts.
+  3. **Subjective Severity Override (`inc-010`):** Gemini received `recommendedSeverity: "high"` from `check_latency_budget` and `"rb-tls-renewal"` from `lookup_runbook`, then subjectively upgraded severity to `"critical"`.
+  4. **Sparse Report Diagnostics:** [`EvalCaseResult`](packages/python-sdk/src/agentgate/types.py) lacked predicted `severity`/`recommended_runbook`, baseline schema/injection/token/p95 aggregates, and pacing-wait tracking.
+- **Fix / Guardrail Added:**
+  - Added `.describe(...)` disambiguations on all MCP tool schemas in [`packages/mcp-server/src/schemas.ts`](packages/mcp-server/src/schemas.ts) and updated tool descriptions in [`packages/mcp-server/src/index.ts`](packages/mcp-server/src/index.ts).
+  - Introduced shared [`RequestPacer`](packages/python-sdk/src/agentgate/llm_gemini.py) across baseline and tool `GeminiToolRunner` instances in [`cli.py`](packages/python-sdk/src/agentgate/cli.py), updated `_build_system_instruction` to batch parallel MCP calls and treat `check_latency_budget.recommendedSeverity` as authoritative, and tracked `pacing_wait_ms` alongside net latency.
+  - Extended [`EvalCaseResult`](packages/python-sdk/src/agentgate/types.py) and [`EvalSuiteReport`](packages/python-sdk/src/agentgate/types.py) with baseline metrics, predicted severity/runbook, `tool_calls`, and `p95_tool_net_latency_ms`, and surfaced them in [`ScenarioDetailPanel.tsx`](packages/dashboard/src/components/ScenarioDetailPanel.tsx).
+- **Regression Test & Verified After-Run:** `MCP stdio server integration` in [`packages/mcp-server/tests/tools.test.ts`](packages/mcp-server/tests/tools.test.ts), `test_shared_request_pacer_enforces_interval_across_runners_and_reports_wait` and `test_gemini_executes_parallel_multi_tool_calls_in_single_turn_over_live_stdio` in [`packages/python-sdk/tests/test_llm_gemini.py`](packages/python-sdk/tests/test_llm_gemini.py), and [`test_evaluate_suite_passes_ci_gate_when_tools_beat_baseline`](packages/python-sdk/tests/test_evaluator.py). In Run 2, tool accuracy improved **0.85 → 1.00 (20/20)** (`inc-004`, `inc-005`, `inc-010` all passed) and p95 latency dropped **42,665.2 ms → 13,777.8 ms** (`passed_ci_gate: true`).
