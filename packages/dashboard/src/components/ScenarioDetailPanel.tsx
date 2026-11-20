@@ -15,12 +15,12 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
   return (
     <aside
       aria-label={`Details for ${row.scenario_id}`}
-      className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5"
+      className="rounded-[10px] border border-[var(--border-strong)] bg-[var(--surface)] p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <code className="rounded-[4px] bg-[var(--raised)] px-2 py-0.5 text-[12px] font-medium text-[var(--text)]">
+            <code className="rounded-[4px] border border-[var(--border)] bg-[var(--raised)] px-2 py-0.5 text-[12px] font-medium text-[var(--accent)]">
               {row.scenario_id}
             </code>
             <span
@@ -54,7 +54,7 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
         <button
           type="button"
           onClick={onClose}
-          className="h-8 rounded-[6px] border border-[var(--control)] bg-[var(--surface)] px-3 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--raised)]"
+          className="h-8 rounded-[6px] border border-[var(--control)] bg-[var(--raised)] px-3 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--active)]"
         >
           Close
         </button>

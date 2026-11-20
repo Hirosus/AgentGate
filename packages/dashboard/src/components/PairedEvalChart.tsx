@@ -91,7 +91,7 @@ export function PairedEvalChart({
     : null;
 
   return (
-    <section className="flex h-full flex-col justify-between rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-5">
+    <section className="flex h-full flex-col justify-between rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -102,7 +102,7 @@ export function PairedEvalChart({
             </h2>
             <p className="mt-0.5 text-[13px] text-[var(--muted)]">
               {activeMetric === "latency"
-                ? `Bars show MCP tool latency; grey ticks mark baseline latency. Gate ceiling <= ${formatMs(latencyGateMs)}.`
+                ? `Bars show MCP tool latency; tick marks show baseline latency. Gate ceiling <= ${formatMs(latencyGateMs)}.`
                 : "Total prompt plus completion tokens across MCP tool turns per scenario."}
             </p>
           </div>
@@ -119,7 +119,7 @@ export function PairedEvalChart({
                   onClick={() => setMetric("latency")}
                   className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
                     activeMetric === "latency"
-                      ? "border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                      ? "bg-[var(--active)] text-[var(--text)]"
                       : "text-[var(--muted)] hover:text-[var(--text)]"
                   }`}
                 >
@@ -130,7 +130,7 @@ export function PairedEvalChart({
                   onClick={() => setMetric("tokens")}
                   className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
                     activeMetric === "tokens"
-                      ? "border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                      ? "bg-[var(--active)] text-[var(--text)]"
                       : "text-[var(--muted)] hover:text-[var(--text)]"
                   }`}
                 >
@@ -141,11 +141,11 @@ export function PairedEvalChart({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[6px] bg-[var(--raised)] px-3 py-2 text-[13px]">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[6px] border border-[var(--rule)] bg-[var(--raised)] px-3 py-2 text-[13px]">
           {activeRow ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <code className="font-medium text-[var(--text)]">{activeRow.scenario_id}</code>
-              <span className="text-[var(--muted)]">{activeRow.title}</span>
+              <code className="font-medium text-[var(--accent)]">{activeRow.scenario_id}</code>
+              <span className="text-[var(--text)]">{activeRow.title}</span>
               <span className="num text-[var(--text)]">
                 MCP {formatMs(activeRow.tool_latency_ms)} ({activeRow.tool_passed ? "pass" : "fail"})
               </span>
@@ -163,24 +163,33 @@ export function PairedEvalChart({
             <span className="text-[var(--muted)]">No scenario telemetry available.</span>
           )}
 
-          <div className="flex flex-wrap items-center gap-4 text-[13px] text-[var(--muted)]">
+          <div className="flex flex-wrap items-center gap-4 text-[12px] text-[var(--muted)]">
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#1b6c80]" />
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-[2px]"
+                style={{ backgroundColor: "var(--chart-1)" }}
+              />
               MCP pass
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#c4242a]" />
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-[2px]"
+                style={{ backgroundColor: "var(--negative)" }}
+              />
               MCP fail
             </span>
             {activeMetric === "latency" && (
               <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-0.5 w-3 bg-[#7b8590]" />
+                <span
+                  className="inline-block h-0.5 w-3"
+                  style={{ backgroundColor: "var(--chart-2)" }}
+                />
                 Baseline
               </span>
             )}
             {showGateLine && (
-              <span className="inline-flex items-center gap-1.5 text-[#92400e]">
-                <span className="inline-block w-3 border-t border-dashed border-[#92400e]" />
+              <span className="inline-flex items-center gap-1.5 text-[var(--warning)]">
+                <span className="inline-block w-3 border-t border-dashed border-[var(--warning)]" />
                 Gate {formatMs(latencyGateMs)}
               </span>
             )}
@@ -205,7 +214,7 @@ export function PairedEvalChart({
                   x2={plotRight}
                   y1={y}
                   y2={y}
-                  stroke={isBaseline ? "#cfd6dc" : "#eaedf0"}
+                  stroke={isBaseline ? "var(--border-strong)" : "var(--rule)"}
                   strokeWidth={1}
                 />
                 <text
@@ -213,7 +222,7 @@ export function PairedEvalChart({
                   y={y + 4}
                   textAnchor="end"
                   fontSize="11"
-                  fill="#555c63"
+                  fill="var(--muted)"
                   className="num"
                 >
                   {formatAxisTick(tickValue, activeMetric)}
@@ -228,7 +237,7 @@ export function PairedEvalChart({
               x2={plotRight}
               y1={gateY}
               y2={gateY}
-              stroke="#92400e"
+              stroke="var(--warning)"
               strokeWidth={1.25}
               strokeDasharray="4 4"
             />
@@ -245,7 +254,7 @@ export function PairedEvalChart({
             );
             const barY = plotBottom - barHeight;
             const isSelected = row.scenario_id === activeId;
-            const fill = row.tool_passed ? "#1b6c80" : "#c4242a";
+            const fill = row.tool_passed ? "var(--chart-1)" : "var(--negative)";
 
             const baseY =
               activeMetric === "latency"
@@ -270,7 +279,7 @@ export function PairedEvalChart({
                   y={plotTop}
                   width={slotWidth}
                   height={plotHeight}
-                  fill={isSelected ? "rgba(27, 108, 128, 0.06)" : "transparent"}
+                  fill={isSelected ? "var(--accent-soft)" : "transparent"}
                 />
                 <rect
                   x={barX}
@@ -280,7 +289,7 @@ export function PairedEvalChart({
                   rx={2}
                   ry={2}
                   fill={fill}
-                  opacity={isSelected ? 1 : 0.88}
+                  opacity={isSelected ? 1 : 0.85}
                 />
                 {baseY !== null && (
                   <line
@@ -288,7 +297,8 @@ export function PairedEvalChart({
                     x2={barX + barWidth + 2}
                     y1={baseY}
                     y2={baseY}
-                    stroke="#555c63"
+                    stroke="var(--text)"
+                    strokeOpacity={0.65}
                     strokeWidth={2}
                   />
                 )}
@@ -298,7 +308,7 @@ export function PairedEvalChart({
                     y={plotBottom + 18}
                     textAnchor="middle"
                     fontSize="11"
-                    fill="#555c63"
+                    fill="var(--muted)"
                     className="num"
                   >
                     {row.scenario_id}

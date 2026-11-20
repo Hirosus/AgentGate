@@ -16,9 +16,9 @@ export default function HomePage() {
   const datasets: readonly RunDataset[] = [
     {
       id: "gemini-live",
-      label: "Gemini 3.1 Flash Lite",
+      label: "Live LLM Suite",
       subtitle:
-        "Live free-tier REST run (shared 3.0s pacing + batched MCP tools) against TypeScript MCP stdio server",
+        "20-scenario live evaluation with shared rate pacing and batched MCP tool execution",
       modelLabel: "gemini-3.1-flash-lite + MCP stdio",
       latencyGateMs: 20000,
       minToolPassRate: 0.85,
@@ -27,9 +27,10 @@ export default function HomePage() {
     },
     {
       id: "deterministic-mcp",
-      label: "Deterministic MCP CI",
-      subtitle: "Offline GitHub Actions PR gate (HeuristicBaselineRunner vs. McpTriageRunner)",
-      modelLabel: "McpTriageRunner + MCP stdio",
+      label: "CI Regression Suite",
+      subtitle:
+        "Automated pull-request quality gate comparing no-tool heuristics against MCP triage",
+      modelLabel: "Deterministic MCP stdio",
       latencyGateMs: 4000,
       minToolPassRate: 0.95,
       minDelta: 0.5,

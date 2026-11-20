@@ -8,9 +8,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AgentGate - Eval CI Gate and MCP Triage Scoreboard",
+  title: "AgentGate — Incident Triage & Eval Operations Console",
   description:
-    "Baseline vs. MCP-assisted incident triage evaluation scoreboard, CI quality gate checks, and prompt-injection safety audit.",
+    "Live HMAC-signed webhook verification, atomic idempotency defense, read-only MCP diagnostic execution, and automated CI eval benchmarking.",
 };
 
 export default function RootLayout({
@@ -19,7 +19,7 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark">
       <body className="min-h-dvh antialiased">{children}</body>
     </html>
   );

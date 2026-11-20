@@ -1,33 +1,74 @@
 @import "tailwindcss";
 
-:root {
+:root,
+[data-theme="dark"] {
   --font-sans: "IBM Plex Sans";
   --font-mono: "IBM Plex Mono";
-  --ground: #f1f5f7;
+  --ground: #090d12;
+  --surface: #0f151d;
+  --raised: #151d28;
+  --active: #1b2636;
+  --border: #1f2b3a;
+  --border-strong: #2d3d52;
+  --rule: #182230;
+  --control: #2d3d52;
+  --text: #e8eef6;
+  --muted: #8b9cb3;
+  --faint: #64748b;
+  --primary: #38bdf8;
+  --primary-ink: #04131c;
+  --accent: #38bdf8;
+  --accent-soft: rgba(56, 189, 248, 0.13);
+  --positive: #34d399;
+  --negative: #f87171;
+  --warning: #fbbf24;
+  --chart-1: #38bdf8;
+  --chart-2: #64748b;
+  --pill-positive-bg: rgba(52, 211, 153, 0.14);
+  --pill-positive-ink: #6ee7b7;
+  --pill-negative-bg: rgba(248, 113, 113, 0.15);
+  --pill-negative-ink: #fca5a5;
+  --pill-warning-bg: rgba(251, 191, 36, 0.14);
+  --pill-warning-ink: #fcd34d;
+  --pill-accent-bg: rgba(56, 189, 248, 0.14);
+  --pill-accent-ink: #7dd3fc;
+  --pill-neutral-bg: rgba(139, 156, 179, 0.14);
+  --pill-neutral-ink: #cbd5e1;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --ground: #f1f5f9;
   --surface: #ffffff;
-  --raised: #f7f9fa;
-  --active: #e4ebef;
-  --border: #e3e8ec;
-  --rule: #eff2f4;
-  --control: #cdd4da;
-  --text: #131416;
-  --muted: #555c63;
-  --faint: #676f77;
-  --primary: #131416;
-  --accent: #1b6c80;
-  --positive: #1e7b4f;
-  --negative: #c4242a;
-  --warning: #92400e;
-  --chart-1: #1b6c80;
-  --chart-2: #8a959f;
-  --pill-positive-bg: #dcfae5;
-  --pill-positive-ink: #04250e;
-  --pill-negative-bg: #ffedea;
-  --pill-negative-ink: #831c1e;
-  --pill-warning-bg: #fffbeb;
-  --pill-warning-ink: #92400e;
-  --pill-neutral-bg: #e9edf0;
-  --pill-neutral-ink: #353a40;
+  --raised: #f8fafc;
+  --active: #e2ecf5;
+  --border: #dbe3ec;
+  --border-strong: #c3cedb;
+  --rule: #e8edf3;
+  --control: #c3cedb;
+  --text: #0f172a;
+  --muted: #475569;
+  --faint: #64748b;
+  --primary: #0f172a;
+  --primary-ink: #ffffff;
+  --accent: #0284c7;
+  --accent-soft: rgba(2, 132, 199, 0.1);
+  --positive: #059669;
+  --negative: #dc2626;
+  --warning: #b45309;
+  --chart-1: #0284c7;
+  --chart-2: #64748b;
+  --pill-positive-bg: #dcfce7;
+  --pill-positive-ink: #14532d;
+  --pill-negative-bg: #fee2e2;
+  --pill-negative-ink: #7f1d1d;
+  --pill-warning-bg: #fef3c7;
+  --pill-warning-ink: #78350f;
+  --pill-accent-bg: #e0f2fe;
+  --pill-accent-ink: #0c4a6e;
+  --pill-neutral-bg: #e2e8f0;
+  --pill-neutral-ink: #334155;
+  color-scheme: light;
 }
 
 body {
