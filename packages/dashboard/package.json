@@ -10,6 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/triageEngine.test.js",
     "typecheck": "node scripts/sync-reports.mjs && next typegen && tsc --noEmit"
   },
   "dependencies": {
