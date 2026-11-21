@@ -21,6 +21,7 @@ export interface EvalCaseResult {
   readonly baseline_severity?: SeverityLevel | null;
   readonly baseline_runbook?: string | null;
   readonly baseline_tokens?: number;
+  readonly baseline_pacing_wait_ms?: number;
   readonly tool_severity?: SeverityLevel | null;
   readonly tool_runbook?: string | null;
   readonly tool_calls?: number;
@@ -43,6 +44,25 @@ export interface EvalSuiteReport {
   readonly p95_baseline_latency_ms?: number;
   readonly baseline_total_tokens?: number;
   readonly p95_tool_net_latency_ms?: number | null;
+  readonly p95_baseline_net_latency_ms?: number | null;
+}
+
+export interface McpCatalogRunbook {
+  readonly runbookId: string;
+  readonly title: string;
+  readonly checks: readonly string[];
+}
+
+export interface McpCatalog {
+  readonly maxLogLineLength: number;
+  readonly defaultBudgetMs: number;
+  readonly knownServices: readonly string[];
+  readonly defaultLogs: Readonly<Record<string, readonly string[]>>;
+  readonly serviceBudgetsMs: Readonly<Record<string, number>>;
+  readonly symptomDescriptions: Readonly<Record<string, string>>;
+  readonly runbooks: Readonly<Record<string, McpCatalogRunbook>>;
+  readonly toolDescriptions: Readonly<Record<string, string>>;
+  readonly parameterDescriptions: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
 export interface MergedCaseRow extends EvalCaseResult {
@@ -61,6 +81,7 @@ export interface RunDataset {
   readonly latencyGateMs: number;
   readonly minToolPassRate: number;
   readonly minDelta: number;
+  readonly isUploaded?: boolean;
   readonly report: EvalSuiteReport;
 }
 
@@ -74,9 +95,12 @@ export interface SummaryMetrics {
   readonly adversarialBlocked: number;
   readonly p50BaselineMs: number;
   readonly p95BaselineMs: number;
+  readonly p95BaselineNetMs: number | null;
   readonly p50ToolMs: number;
   readonly p95ToolMs: number;
+  readonly p95ToolNetMs: number | null;
   readonly totalTokens: number;
+  readonly baselineTotalTokens: number;
   readonly improvedCount: number;
   readonly regressedCount: number;
 }
@@ -95,6 +119,10 @@ export interface RunbookSummary {
   readonly toolPassed: number;
   readonly baselinePassed: number;
   readonly avgToolMs: number;
+}
+
+export function compareScenarioIds(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true });
 }
 
 export function computePercentile(values: readonly number[], p: number): number {
@@ -117,19 +145,21 @@ export function mergeCases(
   for (const scenario of scenarios) {
     byId.set(scenario.scenario_id, scenario);
   }
-  return report.results.map((result) => {
-    const scenario = byId.get(result.scenario_id);
-    return {
-      ...result,
-      title: scenario ? scenario.title : `Scenario ${result.scenario_id}`,
-      payload_text: scenario
-        ? scenario.payload_text
-        : "No local scenario text matched this scenario ID.",
-      expected_severity: scenario ? scenario.expected_severity : null,
-      expected_runbook: scenario ? scenario.expected_runbook : null,
-      is_adversarial_injection: scenario ? scenario.is_adversarial_injection : false,
-    };
-  });
+  return [...report.results]
+    .sort((a, b) => compareScenarioIds(a.scenario_id, b.scenario_id))
+    .map((result) => {
+      const scenario = byId.get(result.scenario_id);
+      return {
+        ...result,
+        title: scenario ? scenario.title : `Scenario ${result.scenario_id}`,
+        payload_text: scenario
+          ? scenario.payload_text
+          : "No local scenario text matched this scenario ID.",
+        expected_severity: scenario ? scenario.expected_severity : null,
+        expected_runbook: scenario ? scenario.expected_runbook : null,
+        is_adversarial_injection: scenario ? scenario.is_adversarial_injection : false,
+      };
+    });
 }
 
 export function computeSummaryMetrics(
@@ -147,6 +177,35 @@ export function computeSummaryMetrics(
   const improvedCount = rows.filter((row) => !row.baseline_passed && row.tool_passed).length;
   const regressedCount = rows.filter((row) => row.baseline_passed && !row.tool_passed).length;
   const summedTokens = rows.reduce((sum, row) => sum + row.total_tokens, 0);
+  const summedBaselineTokens = rows.reduce((sum, row) => sum + (row.baseline_tokens ?? 0), 0);
+
+  const hasToolPacing = rows.some((row) => typeof row.tool_pacing_wait_ms === "number");
+  const p95ToolNetMs =
+    typeof report.p95_tool_net_latency_ms === "number"
+      ? report.p95_tool_net_latency_ms
+      : report.p95_tool_net_latency_ms === null
+        ? null
+        : hasToolPacing
+          ? computePercentile(
+              rows.map((row) => Math.max(0, row.tool_latency_ms - (row.tool_pacing_wait_ms ?? 0))),
+              0.95,
+            )
+          : null;
+
+  const hasBaselinePacing = rows.some((row) => typeof row.baseline_pacing_wait_ms === "number");
+  const p95BaselineNetMs =
+    typeof report.p95_baseline_net_latency_ms === "number"
+      ? report.p95_baseline_net_latency_ms
+      : report.p95_baseline_net_latency_ms === null
+        ? null
+        : hasBaselinePacing
+          ? computePercentile(
+              rows.map((row) =>
+                Math.max(0, row.baseline_latency_ms - (row.baseline_pacing_wait_ms ?? 0)),
+              ),
+              0.95,
+            )
+          : null;
 
   return {
     totalCases: rows.length,
@@ -157,21 +216,33 @@ export function computeSummaryMetrics(
     adversarialTotal: adversarialRows.length,
     adversarialBlocked,
     p50BaselineMs: computePercentile(baselineLatencies, 0.5),
-    p95BaselineMs: computePercentile(baselineLatencies, 0.95),
+    p95BaselineMs: report.p95_baseline_latency_ms ?? computePercentile(baselineLatencies, 0.95),
+    p95BaselineNetMs,
     p50ToolMs: computePercentile(toolLatencies, 0.5),
     p95ToolMs: report.p95_tool_latency_ms,
+    p95ToolNetMs,
     totalTokens: summedTokens > 0 ? summedTokens : report.total_tokens,
+    baselineTotalTokens:
+      summedBaselineTokens > 0 ? summedBaselineTokens : (report.baseline_total_tokens ?? 0),
     improvedCount,
     regressedCount,
   };
 }
 
+const FAILURE_PATTERN_BY_CHECK: Readonly<Record<string, RegExp>> = {
+  "tool-pass": /\btool_pass_rate\b|pass\s*rate|mcp\s*pass/i,
+  delta: /\bdelta\b|improvement/i,
+  schema: /\bschema\b/i,
+  injection: /\binjection\b/i,
+  p95: /\bp95\b|latency/i,
+};
+
 export function buildGateChecks(
   report: EvalSuiteReport,
-  dataset: Pick<RunDataset, "latencyGateMs" | "minToolPassRate" | "minDelta">,
+  dataset: Pick<RunDataset, "latencyGateMs" | "minToolPassRate" | "minDelta" | "isUploaded">,
 ): readonly GateCheckRow[] {
   const delta = report.tool_pass_rate - report.baseline_pass_rate;
-  return [
+  const baseChecks: GateCheckRow[] = [
     {
       id: "tool-pass",
       label: "MCP pass rate",
@@ -208,6 +279,39 @@ export function buildGateChecks(
       passed: report.p95_tool_latency_ms <= dataset.latencyGateMs,
     },
   ];
+
+  const reconciled = baseChecks.map((check) => {
+    if (!check.passed) {
+      return check;
+    }
+    const pattern = Object.hasOwn(FAILURE_PATTERN_BY_CHECK, check.id)
+      ? FAILURE_PATTERN_BY_CHECK[check.id]
+      : undefined;
+    if (!pattern) {
+      return check;
+    }
+    const matchedFailure = report.gate_failures.find((failure) => pattern.test(failure));
+    if (!matchedFailure) {
+      return check;
+    }
+    return {
+      ...check,
+      target: dataset.isUploaded ? "Reported failure" : check.target,
+      passed: false,
+    };
+  });
+
+  if (!report.passed_ci_gate && reconciled.every((check) => check.passed)) {
+    reconciled.push({
+      id: "report-gate",
+      label: "Reported CI gate status",
+      measured: "Failed",
+      target: "passed_ci_gate = true",
+      passed: false,
+    });
+  }
+
+  return reconciled;
 }
 
 export function buildRunbookBreakdown(rows: readonly MergedCaseRow[]): readonly RunbookSummary[] {
@@ -256,29 +360,100 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function getOwn(obj: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(obj, key) ? obj[key] : undefined;
+}
+
 function requireNumber(obj: Record<string, unknown>, key: string): number {
-  const val = obj[key];
-  if (typeof val !== "number" || Number.isNaN(val)) {
-    throw new Error(`Expected numeric field "${key}" in EvalSuiteReport JSON.`);
+  const val = getOwn(obj, key);
+  if (typeof val !== "number" || !Number.isFinite(val)) {
+    throw new Error(`Expected finite numeric field "${key}" in EvalSuiteReport JSON.`);
+  }
+  return val;
+}
+
+function requireNonNegativeNumber(obj: Record<string, unknown>, key: string): number {
+  const val = requireNumber(obj, key);
+  if (val < 0) {
+    throw new Error(`Field "${key}" must be >= 0 (received ${val}).`);
+  }
+  return val;
+}
+
+function requireNonNegativeInteger(obj: Record<string, unknown>, key: string): number {
+  const val = requireNonNegativeNumber(obj, key);
+  if (!Number.isInteger(val)) {
+    throw new Error(`Field "${key}" must be an integer (received ${val}).`);
+  }
+  return val;
+}
+
+function requireRate(obj: Record<string, unknown>, key: string): number {
+  const val = requireNumber(obj, key);
+  if (val < 0 || val > 1) {
+    throw new Error(`Rate field "${key}" must be between 0 and 1 (received ${val}).`);
   }
   return val;
 }
 
 function requireBoolean(obj: Record<string, unknown>, key: string): boolean {
-  const val = obj[key];
+  const val = getOwn(obj, key);
   if (typeof val !== "boolean") {
     throw new Error(`Expected boolean field "${key}" in EvalSuiteReport JSON.`);
   }
   return val;
 }
 
-function optionalNumber(obj: Record<string, unknown>, key: string): number | undefined {
-  const val = obj[key];
+function optionalNonNegativeNumber(obj: Record<string, unknown>, key: string): number | undefined {
+  const val = getOwn(obj, key);
   if (val === undefined || val === null) {
     return undefined;
   }
-  if (typeof val !== "number" || Number.isNaN(val)) {
-    throw new Error(`Expected numeric optional field "${key}" in EvalSuiteReport JSON.`);
+  if (typeof val !== "number" || !Number.isFinite(val)) {
+    throw new Error(`Expected finite numeric optional field "${key}" in EvalSuiteReport JSON.`);
+  }
+  if (val < 0) {
+    throw new Error(`Optional field "${key}" must be >= 0 (received ${val}).`);
+  }
+  return val;
+}
+
+function optionalNullableNonNegativeNumber(
+  obj: Record<string, unknown>,
+  key: string,
+): number | null | undefined {
+  const val = getOwn(obj, key);
+  if (val === undefined) {
+    return undefined;
+  }
+  if (val === null) {
+    return null;
+  }
+  if (typeof val !== "number" || !Number.isFinite(val)) {
+    throw new Error(`Expected finite numeric|null field "${key}" in EvalSuiteReport JSON.`);
+  }
+  if (val < 0) {
+    throw new Error(`Field "${key}" must be >= 0 (received ${val}).`);
+  }
+  return val;
+}
+
+function optionalNullableRate(
+  obj: Record<string, unknown>,
+  key: string,
+): number | null | undefined {
+  const val = getOwn(obj, key);
+  if (val === undefined) {
+    return undefined;
+  }
+  if (val === null) {
+    return null;
+  }
+  if (typeof val !== "number" || !Number.isFinite(val)) {
+    throw new Error(`Expected finite numeric|null rate field "${key}" in EvalSuiteReport JSON.`);
+  }
+  if (val < 0 || val > 1) {
+    throw new Error(`Rate field "${key}" must be between 0 and 1 (received ${val}).`);
   }
   return val;
 }
@@ -287,7 +462,7 @@ function optionalNullableString(
   obj: Record<string, unknown>,
   key: string,
 ): string | null | undefined {
-  const val = obj[key];
+  const val = getOwn(obj, key);
   if (val === undefined) {
     return undefined;
   }
@@ -301,7 +476,7 @@ function optionalSeverity(
   obj: Record<string, unknown>,
   key: string,
 ): SeverityLevel | null | undefined {
-  const val = obj[key];
+  const val = getOwn(obj, key);
   if (val === undefined) {
     return undefined;
   }
@@ -326,41 +501,52 @@ export function parseUploadedReport(rawJson: string): EvalSuiteReport {
     throw new Error("EvalSuiteReport must be a JSON object.");
   }
 
-  const rawResults = parsed.results;
+  const rawResults = getOwn(parsed, "results");
   if (!Array.isArray(rawResults)) {
     throw new Error('Expected "results" array in EvalSuiteReport JSON.');
   }
 
+  const seenScenarioIds = new Set<string>();
   const results: EvalCaseResult[] = rawResults.map((item, idx) => {
     if (!isRecord(item)) {
       throw new Error(`Result entry at index ${idx} must be an object.`);
     }
-    const scenarioId = item.scenario_id;
-    if (typeof scenarioId !== "string" || scenarioId.trim().length === 0) {
+    const rawScenarioId = getOwn(item, "scenario_id");
+    if (typeof rawScenarioId !== "string" || rawScenarioId.trim().length === 0) {
       throw new Error(`Result entry at index ${idx} is missing "scenario_id".`);
     }
+    const scenarioId = rawScenarioId.trim();
+    if (seenScenarioIds.has(scenarioId)) {
+      throw new Error(`Duplicate scenario_id "${scenarioId}" found at result index ${idx}.`);
+    }
+    seenScenarioIds.add(scenarioId);
+
     const baseResult: EvalCaseResult = {
       scenario_id: scenarioId,
       baseline_passed: requireBoolean(item, "baseline_passed"),
       tool_passed: requireBoolean(item, "tool_passed"),
-      baseline_latency_ms: requireNumber(item, "baseline_latency_ms"),
-      tool_latency_ms: requireNumber(item, "tool_latency_ms"),
+      baseline_latency_ms: requireNonNegativeNumber(item, "baseline_latency_ms"),
+      tool_latency_ms: requireNonNegativeNumber(item, "tool_latency_ms"),
       tool_schema_valid: requireBoolean(item, "tool_schema_valid"),
       injection_blocked: requireBoolean(item, "injection_blocked"),
-      total_tokens: requireNumber(item, "total_tokens"),
+      total_tokens: requireNonNegativeNumber(item, "total_tokens"),
     };
     const baselineSeverity = optionalSeverity(item, "baseline_severity");
     const baselineRunbook = optionalNullableString(item, "baseline_runbook");
-    const baselineTokens = optionalNumber(item, "baseline_tokens");
+    const baselineTokens = optionalNonNegativeNumber(item, "baseline_tokens");
+    const baselinePacingWaitMs = optionalNonNegativeNumber(item, "baseline_pacing_wait_ms");
     const toolSeverity = optionalSeverity(item, "tool_severity");
     const toolRunbook = optionalNullableString(item, "tool_runbook");
-    const toolCalls = optionalNumber(item, "tool_calls");
-    const toolPacingWaitMs = optionalNumber(item, "tool_pacing_wait_ms");
+    const toolCalls = optionalNonNegativeNumber(item, "tool_calls");
+    const toolPacingWaitMs = optionalNonNegativeNumber(item, "tool_pacing_wait_ms");
     return {
       ...baseResult,
       ...(baselineSeverity !== undefined ? { baseline_severity: baselineSeverity } : {}),
       ...(baselineRunbook !== undefined ? { baseline_runbook: baselineRunbook } : {}),
       ...(baselineTokens !== undefined ? { baseline_tokens: baselineTokens } : {}),
+      ...(baselinePacingWaitMs !== undefined
+        ? { baseline_pacing_wait_ms: baselinePacingWaitMs }
+        : {}),
       ...(toolSeverity !== undefined ? { tool_severity: toolSeverity } : {}),
       ...(toolRunbook !== undefined ? { tool_runbook: toolRunbook } : {}),
       ...(toolCalls !== undefined ? { tool_calls: toolCalls } : {}),
@@ -368,25 +554,42 @@ export function parseUploadedReport(rawJson: string): EvalSuiteReport {
     };
   });
 
-  const rawFailures = parsed.gate_failures;
+  const totalCases = requireNonNegativeInteger(parsed, "total_cases");
+  if (totalCases !== results.length) {
+    throw new Error(
+      `Report "total_cases" (${totalCases}) does not match "results" length (${results.length}).`,
+    );
+  }
+
+  const rawFailures = getOwn(parsed, "gate_failures");
+  if (rawFailures !== undefined && !Array.isArray(rawFailures)) {
+    throw new Error('Field "gate_failures" must be an array of strings when present.');
+  }
   const gateFailures = Array.isArray(rawFailures)
     ? rawFailures.filter((item): item is string => typeof item === "string")
     : [];
 
-  const baselineSchemaValidRate = optionalNumber(parsed, "baseline_schema_valid_rate");
-  const baselineInjectionBlockRate = optionalNumber(parsed, "baseline_injection_block_rate");
-  const p95BaselineLatencyMs = optionalNumber(parsed, "p95_baseline_latency_ms");
-  const baselineTotalTokens = optionalNumber(parsed, "baseline_total_tokens");
-  const p95ToolNetLatencyMs = optionalNumber(parsed, "p95_tool_net_latency_ms");
+  const baselineSchemaValidRate = optionalNullableRate(parsed, "baseline_schema_valid_rate");
+  const baselineInjectionBlockRate = optionalNullableRate(
+    parsed,
+    "baseline_injection_block_rate",
+  );
+  const p95BaselineLatencyMs = optionalNonNegativeNumber(parsed, "p95_baseline_latency_ms");
+  const baselineTotalTokens = optionalNonNegativeNumber(parsed, "baseline_total_tokens");
+  const p95ToolNetLatencyMs = optionalNullableNonNegativeNumber(parsed, "p95_tool_net_latency_ms");
+  const p95BaselineNetLatencyMs = optionalNullableNonNegativeNumber(
+    parsed,
+    "p95_baseline_net_latency_ms",
+  );
 
   return {
-    total_cases: requireNumber(parsed, "total_cases"),
-    baseline_pass_rate: requireNumber(parsed, "baseline_pass_rate"),
-    tool_pass_rate: requireNumber(parsed, "tool_pass_rate"),
-    schema_valid_rate: requireNumber(parsed, "schema_valid_rate"),
-    injection_block_rate: requireNumber(parsed, "injection_block_rate"),
-    p95_tool_latency_ms: requireNumber(parsed, "p95_tool_latency_ms"),
-    total_tokens: requireNumber(parsed, "total_tokens"),
+    total_cases: totalCases,
+    baseline_pass_rate: requireRate(parsed, "baseline_pass_rate"),
+    tool_pass_rate: requireRate(parsed, "tool_pass_rate"),
+    schema_valid_rate: requireRate(parsed, "schema_valid_rate"),
+    injection_block_rate: requireRate(parsed, "injection_block_rate"),
+    p95_tool_latency_ms: requireNonNegativeNumber(parsed, "p95_tool_latency_ms"),
+    total_tokens: requireNonNegativeNumber(parsed, "total_tokens"),
     passed_ci_gate: requireBoolean(parsed, "passed_ci_gate"),
     gate_failures: gateFailures,
     results,
@@ -399,11 +602,12 @@ export function parseUploadedReport(rawJson: string): EvalSuiteReport {
     ...(p95BaselineLatencyMs !== undefined
       ? { p95_baseline_latency_ms: p95BaselineLatencyMs }
       : {}),
-    ...(baselineTotalTokens !== undefined
-      ? { baseline_total_tokens: baselineTotalTokens }
-      : {}),
+    ...(baselineTotalTokens !== undefined ? { baseline_total_tokens: baselineTotalTokens } : {}),
     ...(p95ToolNetLatencyMs !== undefined
       ? { p95_tool_net_latency_ms: p95ToolNetLatencyMs }
+      : {}),
+    ...(p95BaselineNetLatencyMs !== undefined
+      ? { p95_baseline_net_latency_ms: p95BaselineNetLatencyMs }
       : {}),
   };
 }

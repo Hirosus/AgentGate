@@ -7,9 +7,20 @@
     "rootDir": ".",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/lib/triageCatalog.ts", "src/lib/triageEngine.ts", "tests/triageEngine.test.ts"]
+  "include": [
+    "src/data/gemini-report.json",
+    "src/data/latest-report.json",
+    "src/data/mcp-catalog.json",
+    "src/data/scenarios.json",
+    "src/lib/evalData.ts",
+    "src/lib/triageCatalog.ts",
+    "src/lib/triageEngine.ts",
+    "tests/evalData.test.ts",
+    "tests/triageEngine.test.ts"
+  ]
 }

@@ -5,20 +5,22 @@ import scenariosJson from "@/data/scenarios.json";
 import type {
   EvalScenario,
   EvalSuiteReport,
+  McpCatalog,
   RunDataset,
 } from "@/lib/evalData";
+import { MCP_CATALOG } from "@/lib/triageCatalog";
 
 export default function HomePage() {
   const scenarios = scenariosJson as readonly EvalScenario[];
   const geminiReport = geminiReportJson as EvalSuiteReport;
   const deterministicReport = latestReportJson as EvalSuiteReport;
+  const catalog = MCP_CATALOG as McpCatalog;
 
   const datasets: readonly RunDataset[] = [
     {
       id: "gemini-live",
       label: "Live LLM Suite",
-      subtitle:
-        "20-scenario live evaluation with shared rate pacing and batched MCP tool execution",
+      subtitle: `${geminiReport.total_cases}-scenario live evaluation with shared rate pacing and batched MCP tool execution`,
       modelLabel: "gemini-3.1-flash-lite + MCP stdio",
       latencyGateMs: 20000,
       minToolPassRate: 0.85,
@@ -28,8 +30,7 @@ export default function HomePage() {
     {
       id: "deterministic-mcp",
       label: "CI Regression Suite",
-      subtitle:
-        "Automated pull-request quality gate comparing no-tool heuristics against MCP triage",
+      subtitle: `${deterministicReport.total_cases}-scenario pull-request quality gate comparing no-tool heuristics against MCP triage`,
       modelLabel: "Deterministic MCP stdio",
       latencyGateMs: 4000,
       minToolPassRate: 0.95,
@@ -38,5 +39,5 @@ export default function HomePage() {
     },
   ];
 
-  return <ScoreboardApp datasets={datasets} scenarios={scenarios} />;
+  return <ScoreboardApp datasets={datasets} scenarios={scenarios} catalog={catalog} />;
 }

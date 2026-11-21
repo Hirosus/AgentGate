@@ -79,7 +79,9 @@ export function PairedEvalChart({
   const plotHeight = plotBottom - plotTop;
 
   const slotWidth = rows.length > 0 ? plotWidth / rows.length : plotWidth;
-  const barWidth = Math.max(8, Math.min(22, slotWidth * 0.56));
+  const barWidth = Math.min(22, Math.max(3, slotWidth * 0.56));
+  const baselineTickOverhang = Math.min(2, barWidth * 0.35);
+  const labelStride = rows.length <= 25 ? 5 : Math.ceil(rows.length / 5);
 
   const activeId = hoveredId ?? selectedScenarioId ?? rows[0]?.scenario_id ?? null;
   const activeRow = rows.find((row) => row.scenario_id === activeId) ?? rows[0];
@@ -116,6 +118,7 @@ export function PairedEvalChart({
               >
                 <button
                   type="button"
+                  aria-pressed={activeMetric === "latency"}
                   onClick={() => setMetric("latency")}
                   className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
                     activeMetric === "latency"
@@ -127,6 +130,7 @@ export function PairedEvalChart({
                 </button>
                 <button
                   type="button"
+                  aria-pressed={activeMetric === "tokens"}
                   onClick={() => setMetric("tokens")}
                   className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
                     activeMetric === "tokens"
@@ -182,7 +186,7 @@ export function PairedEvalChart({
               <span className="inline-flex items-center gap-1.5">
                 <span
                   className="inline-block h-0.5 w-3"
-                  style={{ backgroundColor: "var(--chart-2)" }}
+                  style={{ backgroundColor: "var(--text)", opacity: 0.65 }}
                 />
                 Baseline
               </span>
@@ -264,15 +268,31 @@ export function PairedEvalChart({
             const showXLabel =
               idx === 0 ||
               idx === rows.length - 1 ||
-              (idx + 1) % 5 === 0;
+              (idx + 1) % labelStride === 0;
+            const barAriaLabel =
+              activeMetric === "latency"
+                ? `${row.scenario_id} ${row.title}: MCP ${formatMs(row.tool_latency_ms)} (${row.tool_passed ? "pass" : "fail"}), Baseline ${formatMs(row.baseline_latency_ms)}`
+                : `${row.scenario_id} ${row.title}: ${formatInt(row.total_tokens)} tokens (${row.tool_passed ? "pass" : "fail"})`;
 
             return (
               <g
                 key={row.scenario_id}
+                role="button"
+                tabIndex={0}
+                aria-label={barAriaLabel}
+                aria-pressed={row.scenario_id === selectedScenarioId}
                 onMouseEnter={() => setHoveredId(row.scenario_id)}
                 onMouseLeave={() => setHoveredId(null)}
+                onFocus={() => setHoveredId(row.scenario_id)}
+                onBlur={() => setHoveredId(null)}
                 onClick={() => onSelectScenario(row.scenario_id)}
-                className="cursor-pointer"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectScenario(row.scenario_id);
+                  }
+                }}
+                className="cursor-pointer focus:outline-none"
               >
                 <rect
                   x={plotLeft + slotWidth * idx}
@@ -293,8 +313,8 @@ export function PairedEvalChart({
                 />
                 {baseY !== null && (
                   <line
-                    x1={barX - 2}
-                    x2={barX + barWidth + 2}
+                    x1={barX - baselineTickOverhang}
+                    x2={barX + barWidth + baselineTickOverhang}
                     y1={baseY}
                     y2={baseY}
                     stroke="var(--text)"

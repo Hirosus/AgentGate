@@ -12,6 +12,11 @@ interface ScenarioDetailPanelProps {
 }
 
 export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) {
+  const toolRunbookMismatch =
+    row.expected_severity !== null
+      ? row.tool_runbook !== row.expected_runbook
+      : !row.tool_passed && row.tool_runbook !== null;
+
   return (
     <aside
       aria-label={`Details for ${row.scenario_id}`}
@@ -103,15 +108,22 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
               <div
                 className="mt-0.5 text-[12px]"
                 style={{
-                  color:
-                    row.expected_runbook !== null && row.tool_runbook !== row.expected_runbook
-                      ? "var(--negative)"
-                      : "var(--muted)",
+                  color: toolRunbookMismatch ? "var(--negative)" : "var(--muted)",
                 }}
               >
                 MCP:{" "}
                 {row.tool_runbook ? (
                   <code className="text-[12px]">{row.tool_runbook}</code>
+                ) : (
+                  "None"
+                )}
+              </div>
+            )}
+            {row.baseline_runbook !== undefined && (
+              <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                Baseline:{" "}
+                {row.baseline_runbook ? (
+                  <code className="text-[12px]">{row.baseline_runbook}</code>
                 ) : (
                   "None"
                 )}
@@ -123,6 +135,12 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
             <div className="num mt-0.5 font-medium text-[var(--text)]">
               {row.baseline_passed ? "Pass" : "Fail"} ({formatMs(row.baseline_latency_ms)})
             </div>
+            {(row.baseline_pacing_wait_ms ?? 0) > 0 && (
+              <div className="num mt-0.5 text-[12px] text-[var(--muted)]">
+                Net {formatMs(Math.max(0, row.baseline_latency_ms - (row.baseline_pacing_wait_ms ?? 0)))} ·{" "}
+                {formatMs(row.baseline_pacing_wait_ms ?? 0)} pacing
+              </div>
+            )}
             {row.baseline_severity && (
               <div className="mt-0.5 text-[12px] text-[var(--muted)]">
                 Pred: {row.baseline_severity}
@@ -155,6 +173,11 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
             <div className="num mt-0.5 font-medium text-[var(--text)]">
               {row.total_tokens > 0 ? `${formatInt(row.total_tokens)} tok` : "0 tok"}
             </div>
+            {row.baseline_tokens !== undefined && (
+              <div className="num mt-0.5 text-[12px] text-[var(--muted)]">
+                Baseline: {formatInt(row.baseline_tokens)} tok
+              </div>
+            )}
           </div>
         </div>
       </div>

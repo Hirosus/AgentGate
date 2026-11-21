@@ -2,7 +2,7 @@
   "name": "@agentgate/dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Next.js App Router + Tailwind CSS eval scoreboard for AgentGate",
+  "description": "Next.js App Router live webhook triage workbench & MCP eval operations console for AgentGate",
   "scripts": {
     "sync-data": "node scripts/sync-reports.mjs",
     "predev": "node scripts/sync-reports.mjs",
@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/triageEngine.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/tests/triageEngine.test.js dist-test/tests/evalData.test.js",
     "typecheck": "node scripts/sync-reports.mjs && next typegen && tsc --noEmit"
   },
   "dependencies": {
