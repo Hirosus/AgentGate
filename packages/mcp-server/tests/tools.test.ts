@@ -68,6 +68,18 @@ describe("inspectLogExcerpt", () => {
     assert.equal(res.truncated, false);
     assert.equal(res.untrustedTelemetry, true);
   });
+
+  it("ignores Object.prototype keys like constructor and __proto__", () => {
+    const ctorLogs = inspectLogExcerpt("constructor", 10);
+    assert.equal(ctorLogs.service, "constructor");
+    assert.deepEqual(ctorLogs.lines, []);
+    assert.equal(ctorLogs.truncated, false);
+    assert.equal(ctorLogs.untrustedTelemetry, true);
+
+    const protoLogs = inspectLogExcerpt("__proto__", 10);
+    assert.deepEqual(protoLogs.lines, []);
+    assert.equal(protoLogs.truncated, false);
+  });
 });
 
 describe("checkLatencyBudget", () => {
@@ -93,6 +105,18 @@ describe("checkLatencyBudget", () => {
     assert.equal(fallback.breached, true);
     assert.equal(fallback.recommendedSeverity, "medium");
   });
+
+  it("uses 500ms default budget for prototype property names without crashing", () => {
+    const ctorBudget = checkLatencyBudget("constructor", 400);
+    assert.equal(ctorBudget.budgetMs, 500);
+    assert.equal(ctorBudget.breached, false);
+    assert.equal(ctorBudget.recommendedSeverity, "low");
+
+    const protoBudget = checkLatencyBudget("__proto__", 1500);
+    assert.equal(protoBudget.budgetMs, 500);
+    assert.equal(protoBudget.breached, true);
+    assert.equal(protoBudget.recommendedSeverity, "high");
+  });
 });
 
 describe("lookupRunbook", () => {
@@ -113,6 +137,11 @@ describe("lookupRunbook", () => {
       assert.equal(entry.runbookId, expectedId);
       assert.ok(entry.checks.length >= 2);
     }
+
+    assert.throws(
+      () => lookupRunbook("constructor" as unknown as Parameters<typeof lookupRunbook>[0]),
+      /Unknown runbook symptom tag/,
+    );
   });
 });
 

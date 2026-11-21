@@ -3,15 +3,18 @@ import { NextResponse } from "next/server";
 import {
   checkLiveAiRateLimit,
   claimIdempotencyKey,
-  getDemoIdempotencyMap,
+  extractClientIp,
   getDemoLiveRateMap,
+  isSameOriginRequest,
   LEDGER_COOKIE_NAME,
   parseSignedLedgerCookie,
   resolveDemoSigningSecret,
+  resolveWebhookMaxAgeSeconds,
   runBaselineHeuristic,
   runDeterministicMcpTriage,
   runGeminiMcpTriage,
   serializeSignedLedgerCookie,
+  SERVICE_NAME_RE,
   signWebhookPayload,
   verifyWebhookSignature,
   type EngineMode,
@@ -23,8 +26,15 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_AGE_SECONDS = 300;
 const TTL_SECONDS = 86_400;
+
+const LEDGER_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "strict" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/api/triage",
+  maxAge: TTL_SECONDS,
+};
 
 interface TriagePostBody {
   readonly mode?: unknown;
@@ -55,22 +65,28 @@ export async function GET(): Promise<NextResponse> {
     secret,
     nowSec,
   );
-  const memMap = getDemoIdempotencyMap();
-  const merged = new Set<string>(Object.keys(cookieKeys));
-  for (const [k, exp] of memMap.entries()) {
-    if (exp > nowSec) {
-      merged.add(k);
-    }
-  }
 
   return NextResponse.json({
     liveAiConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
-    claimedKeyCount: merged.size,
+    claimedKeyCount: cookieKeys.size,
   });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
   const startedAt = performance.now();
+
+  if (!isSameOriginRequest(request)) {
+    return NextResponse.json({ error: "Cross-origin request forbidden." }, { status: 403 });
+  }
+
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.includes("application/json")) {
+    return NextResponse.json(
+      { error: "Unsupported Media Type: Content-Type must include application/json." },
+      { status: 415 },
+    );
+  }
+
   let rawJson: unknown;
   try {
     rawJson = await request.json();
@@ -96,7 +112,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       ? body.idempotencyKey.trim().slice(0, 128)
       : `evt-${Date.now()}`;
   const service =
-    typeof body.service === "string" && /^[a-z0-9-]{1,64}$/.test(body.service.trim())
+    typeof body.service === "string" && SERVICE_NAME_RE.test(body.service.trim())
       ? body.service.trim()
       : undefined;
   const p95Ms =
@@ -107,18 +123,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   const requestedMode = parseMode(body.mode);
   const fault = parseFault(body.fault);
   const secret = resolveDemoSigningSecret();
+  const maxAgeSeconds = resolveWebhookMaxAgeSeconds();
   const liveApiKey = process.env.GEMINI_API_KEY?.trim() || "";
   const liveAiConfigured = liveApiKey.length > 0;
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const signedTimestamp = fault === "stale_timestamp" ? nowSec - 600 : nowSec;
+  const signedTimestamp =
+    fault === "stale_timestamp" ? nowSec - Math.max(600, maxAgeSeconds + 300) : nowSec;
   const canonicalPayload = JSON.stringify({
     service: service ?? null,
     p95Ms: p95Ms ?? null,
     payloadText,
     idempotencyKey,
   });
-  const signature = signWebhookPayload(secret, signedTimestamp, canonicalPayload);
+  const signature = signWebhookPayload(secret, signedTimestamp, idempotencyKey, canonicalPayload);
   const wireBody =
     fault === "tamper_body"
       ? JSON.stringify({
@@ -142,45 +160,57 @@ export async function POST(request: Request): Promise<NextResponse> {
   };
 
   const cookieStore = await cookies();
-  const memMap = getDemoIdempotencyMap();
   const cookieKeys = parseSignedLedgerCookie(
     cookieStore.get(LEDGER_COOKIE_NAME)?.value,
     secret,
     nowSec,
   );
 
-  // Stage 1 & 2 mirror agentgate.webhook.ingest_webhook exact security ordering.
+  const stageLabelReplay = `Replay Window (${maxAgeSeconds}s)`;
+  const stageLabelHmac = "HMAC-SHA256 v2 Signature";
+  const stageLabelIdempotency = "Idempotency Ledger";
+  const stageLabelMcp = "MCP Diagnostic Tools";
+  const stageLabelVerdict = "Structured Verdict & Injection Guard";
+
+  // Stage 1: Replay window check (mirrors agentgate.webhook.ingest_webhook).
   const tReplayStart = performance.now();
   const ageSeconds = Math.abs(nowSec - signedTimestamp);
-  const replayOk = ageSeconds <= MAX_AGE_SECONDS;
+  const replayOk = ageSeconds <= maxAgeSeconds;
   const replayCheckMs = Math.max(0.05, Number((performance.now() - tReplayStart).toFixed(2)));
 
   if (!replayOk) {
     const stages: PipelineStageResult[] = [
       {
+        id: "replay",
+        label: stageLabelReplay,
+        status: "failed",
+        detail: `Timestamp skew (${ageSeconds}s) exceeds ${maxAgeSeconds}s window.`,
+        durationMs: replayCheckMs,
+      },
+      {
         id: "hmac",
-        label: "HMAC-SHA256 Raw-Body Verify",
+        label: stageLabelHmac,
         status: "skipped",
         detail: "Skipped after replay-window failure to block stale deliveries fast.",
         durationMs: 0,
       },
       {
         id: "idempotency",
-        label: "Replay Window & Idempotency",
-        status: "failed",
-        detail: `Timestamp skew (${ageSeconds}s) exceeds ${MAX_AGE_SECONDS}s window.`,
-        durationMs: replayCheckMs,
+        label: stageLabelIdempotency,
+        status: "skipped",
+        detail: "Idempotency key left unclaimed after replay-window rejection.",
+        durationMs: 0,
       },
       {
         id: "mcp",
-        label: "MCP Diagnostic Tools",
+        label: stageLabelMcp,
         status: "skipped",
         detail: "Not executed because webhook envelope was rejected (401).",
         durationMs: 0,
       },
       {
         id: "verdict",
-        label: "Structured Verdict & Injection Guard",
+        label: stageLabelVerdict,
         status: "skipped",
         detail: "No agent invocation billed on unauthenticated requests.",
         durationMs: 0,
@@ -190,53 +220,67 @@ export async function POST(request: Request): Promise<NextResponse> {
     const resPayload: TriageApiResponse = {
       httpStatus: 401,
       webhookStatus: "rejected_stale",
-      reason: `Timestamp skew exceeds ${MAX_AGE_SECONDS}s replay window.`,
+      reason: `Timestamp skew exceeds ${maxAgeSeconds}s replay window.`,
       requestEnvelope,
       stages,
       toolTraces: [],
       baselineOutput: null,
       mcpOutput: null,
       injectionDetected: false,
-      injectionBlocked: true,
+      injectionBlocked: null,
       engineUsed: null,
       fallbackNotice: null,
       totalLatencyMs: Number((performance.now() - startedAt).toFixed(2)),
-      claimedKeyCount: Object.keys(cookieKeys).length,
+      claimedKeyCount: cookieKeys.size,
       liveAiConfigured,
     };
     return NextResponse.json(resPayload, { status: 401 });
   }
 
+  // Stage 2: Cryptographic v2 HMAC verification.
   const tHmacStart = performance.now();
-  const sigValid = verifyWebhookSignature(secret, signedTimestamp, wireBody, signature);
+  const sigValid = verifyWebhookSignature(
+    secret,
+    signedTimestamp,
+    idempotencyKey,
+    wireBody,
+    signature,
+  );
   const hmacMs = Math.max(0.05, Number((performance.now() - tHmacStart).toFixed(2)));
 
   if (!sigValid) {
     const stages: PipelineStageResult[] = [
       {
+        id: "replay",
+        label: stageLabelReplay,
+        status: "passed",
+        detail: `Timestamp within ${maxAgeSeconds}s replay window (age ${ageSeconds}s).`,
+        durationMs: replayCheckMs,
+      },
+      {
         id: "hmac",
-        label: "HMAC-SHA256 Raw-Body Verify",
+        label: stageLabelHmac,
         status: "failed",
-        detail: "timingSafeEqual mismatch — wire body hash did not match v1 signature.",
+        detail: "timingSafeEqual mismatch — wire body or key binding did not match v2 signature.",
         durationMs: hmacMs,
       },
       {
         id: "idempotency",
-        label: "Replay Window & Idempotency",
+        label: stageLabelIdempotency,
         status: "skipped",
         detail: "Idempotency key left unclaimed after invalid signature.",
         durationMs: 0,
       },
       {
         id: "mcp",
-        label: "MCP Diagnostic Tools",
+        label: stageLabelMcp,
         status: "skipped",
         detail: "Not executed because signature verification failed (401).",
         durationMs: 0,
       },
       {
         id: "verdict",
-        label: "Structured Verdict & Injection Guard",
+        label: stageLabelVerdict,
         status: "skipped",
         detail: "Protected downstream triage loop from unverified payload.",
         durationMs: 0,
@@ -246,54 +290,66 @@ export async function POST(request: Request): Promise<NextResponse> {
     const resPayload: TriageApiResponse = {
       httpStatus: 401,
       webhookStatus: "rejected_signature",
-      reason: "Invalid or tampered HMAC-SHA256 raw-body signature.",
+      reason: "Invalid or tampered HMAC-SHA256 v2 webhook signature.",
       requestEnvelope,
       stages,
       toolTraces: [],
       baselineOutput: null,
       mcpOutput: null,
       injectionDetected: false,
-      injectionBlocked: true,
+      injectionBlocked: null,
       engineUsed: null,
       fallbackNotice: null,
       totalLatencyMs: Number((performance.now() - startedAt).toFixed(2)),
-      claimedKeyCount: Object.keys(cookieKeys).length,
+      claimedKeyCount: cookieKeys.size,
       liveAiConfigured,
     };
     return NextResponse.json(resPayload, { status: 401 });
   }
 
+  // Stage 3: Per-session signed cookie idempotency ledger.
   const tClaimStart = performance.now();
-  const claim = claimIdempotencyKey(idempotencyKey, memMap, cookieKeys, nowSec, TTL_SECONDS);
+  if (fault === "duplicate_replay" && !cookieKeys.has(idempotencyKey)) {
+    cookieKeys.set(idempotencyKey, nowSec + TTL_SECONDS);
+  }
+  const claim = claimIdempotencyKey(idempotencyKey, null, cookieKeys, nowSec, TTL_SECONDS);
   const claimMs = Math.max(0.05, Number((performance.now() - tClaimStart).toFixed(2)));
   const signedCookie = serializeSignedLedgerCookie(claim.updatedCookieKeys, secret);
+  const persistedKeyCount = parseSignedLedgerCookie(signedCookie, secret, nowSec).size;
 
   if (!claim.claimed) {
     const stages: PipelineStageResult[] = [
       {
-        id: "hmac",
-        label: "HMAC-SHA256 Raw-Body Verify",
+        id: "replay",
+        label: stageLabelReplay,
         status: "passed",
-        detail: `Verified v1 signature on ${wireBody.length}-byte raw payload (age ${ageSeconds}s).`,
+        detail: `Timestamp within ${maxAgeSeconds}s replay window (age ${ageSeconds}s).`,
+        durationMs: replayCheckMs,
+      },
+      {
+        id: "hmac",
+        label: stageLabelHmac,
+        status: "passed",
+        detail: `Verified v2 signature on ${wireBody.length}-byte raw payload bound to '${idempotencyKey}'.`,
         durationMs: hmacMs,
       },
       {
         id: "idempotency",
-        label: "Replay Window & Idempotency",
+        label: stageLabelIdempotency,
         status: "passed",
         detail: `Duplicate key '${idempotencyKey}' detected; claim denied without re-running agent.`,
         durationMs: claimMs,
       },
       {
         id: "mcp",
-        label: "MCP Diagnostic Tools",
+        label: stageLabelMcp,
         status: "skipped",
         detail: "Skipped duplicate webhook execution (zero duplicate LLM/MCP calls).",
         durationMs: 0,
       },
       {
         id: "verdict",
-        label: "Structured Verdict & Injection Guard",
+        label: stageLabelVerdict,
         status: "skipped",
         detail: "Idempotency guarantee prevented duplicate alert fan-out.",
         durationMs: 0,
@@ -310,26 +366,20 @@ export async function POST(request: Request): Promise<NextResponse> {
       baselineOutput: null,
       mcpOutput: null,
       injectionDetected: false,
-      injectionBlocked: true,
+      injectionBlocked: null,
       engineUsed: null,
       fallbackNotice: null,
       totalLatencyMs: Number((performance.now() - startedAt).toFixed(2)),
-      claimedKeyCount: Object.keys(claim.updatedCookieKeys).length,
+      claimedKeyCount: persistedKeyCount,
       liveAiConfigured,
     };
 
     const res = NextResponse.json(resPayload, { status: 200 });
-    res.cookies.set(LEDGER_COOKIE_NAME, signedCookie, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: TTL_SECONDS,
-    });
+    res.cookies.set(LEDGER_COOKIE_NAME, signedCookie, LEDGER_COOKIE_OPTIONS);
     return res;
   }
 
-  // Stage 3 & 4: Authenticated unique webhook — execute baseline vs. MCP triage.
+  // Stage 4 & 5: Authenticated unique webhook — execute baseline vs. MCP triage.
   const baselineOutput = runBaselineHeuristic(payloadText);
   const tAgentStart = performance.now();
   let executionResult;
@@ -345,11 +395,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       };
     } else {
       const headerStore = await headers();
-      const forwardedFor = headerStore.get("x-forwarded-for");
-      const clientIp =
-        forwardedFor?.split(",")[0]?.trim() ||
-        headerStore.get("x-real-ip")?.trim() ||
-        "local";
+      const clientIp = extractClientIp(headerStore);
       const rateLimit = checkLiveAiRateLimit(getDemoLiveRateMap(), clientIp, Date.now(), 5, 60_000);
       if (!rateLimit.allowed) {
         const det = runDeterministicMcpTriage(payloadText, service, p95Ms);
@@ -366,45 +412,51 @@ export async function POST(request: Request): Promise<NextResponse> {
     executionResult = runDeterministicMcpTriage(payloadText, service, p95Ms);
   }
 
-  const agentMs = Math.max(0.1, Number((performance.now() - tAgentStart).toFixed(2)));
+  const agentMs = Math.max(0.05, Number((performance.now() - tAgentStart).toFixed(2)));
   const mcpToolDurationSum = executionResult.toolTraces.reduce(
     (sum, trace) => sum + trace.durationMs,
     0,
   );
+  const mcpStageDuration = Number(mcpToolDurationSum.toFixed(2));
+  const verdictStageDuration = Math.max(0.05, Number((agentMs - mcpToolDurationSum).toFixed(2)));
 
   const stages: PipelineStageResult[] = [
     {
-      id: "hmac",
-      label: "HMAC-SHA256 Raw-Body Verify",
+      id: "replay",
+      label: stageLabelReplay,
       status: "passed",
-      detail: `Verified v1 signature on ${wireBody.length}-byte raw payload (age ${ageSeconds}s).`,
+      detail: `Timestamp within ${maxAgeSeconds}s replay window (age ${ageSeconds}s).`,
+      durationMs: replayCheckMs,
+    },
+    {
+      id: "hmac",
+      label: stageLabelHmac,
+      status: "passed",
+      detail: `Verified v2 signature on ${wireBody.length}-byte raw payload bound to '${idempotencyKey}'.`,
       durationMs: hmacMs,
     },
     {
       id: "idempotency",
-      label: "Replay Window & Idempotency",
+      label: stageLabelIdempotency,
       status: "passed",
-      detail: `Claimed unique key '${idempotencyKey}' into TTL + signed session ledger.`,
+      detail: `Claimed unique key '${idempotencyKey}' into signed per-session cookie ledger.`,
       durationMs: claimMs,
     },
     {
       id: "mcp",
-      label: "MCP Diagnostic Tools",
+      label: stageLabelMcp,
       status: "passed",
       detail: `${executionResult.toolTraces.length} read-only tool call(s) (${executionResult.engineUsed === "live_ai" ? "Live AI + MCP" : "Instant MCP"}).`,
-      durationMs:
-        executionResult.engineUsed === "live_ai"
-          ? agentMs
-          : Number(mcpToolDurationSum.toFixed(2)),
+      durationMs: mcpStageDuration,
     },
     {
       id: "verdict",
-      label: "Structured Verdict & Injection Guard",
+      label: stageLabelVerdict,
       status: "passed",
       detail: executionResult.injectionDetected
         ? `Adversarial override neutralized; severity=${executionResult.verdict.severity}, runbook=${executionResult.verdict.recommendedRunbook ?? "null"}.`
         : `Schema-valid JSON output; severity=${executionResult.verdict.severity}, runbook=${executionResult.verdict.recommendedRunbook ?? "null"}.`,
-      durationMs: executionResult.engineUsed === "live_ai" ? 0.1 : agentMs,
+      durationMs: verdictStageDuration,
     },
   ];
 
@@ -422,17 +474,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     engineUsed: executionResult.engineUsed,
     fallbackNotice: executionResult.fallbackUsed ? executionResult.fallbackReason : null,
     totalLatencyMs: Number((performance.now() - startedAt).toFixed(2)),
-    claimedKeyCount: Object.keys(claim.updatedCookieKeys).length,
+    claimedKeyCount: persistedKeyCount,
     liveAiConfigured,
   };
 
   const res = NextResponse.json(resPayload, { status: 200 });
-  res.cookies.set(LEDGER_COOKIE_NAME, signedCookie, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: TTL_SECONDS,
-  });
+  res.cookies.set(LEDGER_COOKIE_NAME, signedCookie, LEDGER_COOKIE_OPTIONS);
   return res;
 }

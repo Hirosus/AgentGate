@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import catalog from "./catalog.json" with { type: "json" };
 import {
   CheckLatencyBudgetSchema,
   InspectLogExcerptSchema,
@@ -14,7 +15,7 @@ const server = new McpServer({
 
 server.tool(
   "inspect_log_excerpt",
-  "Read bounded diagnostic log lines for a service (untrusted external telemetry; read-only).",
+  catalog.toolDescriptions.inspect_log_excerpt,
   InspectLogExcerptSchema,
   async ({ service, maxLines }) => ({
     content: [{ type: "text", text: JSON.stringify(inspectLogExcerpt(service, maxLines)) }],
@@ -23,7 +24,7 @@ server.tool(
 
 server.tool(
   "check_latency_budget",
-  "Compare observed service p95 latency in milliseconds against its SLA budget and return the SLA-calibrated recommendedSeverity (low, medium, high, or critical).",
+  catalog.toolDescriptions.check_latency_budget,
   CheckLatencyBudgetSchema,
   async ({ service, p95Ms }) => ({
     content: [{ type: "text", text: JSON.stringify(checkLatencyBudget(service, p95Ms)) }],
@@ -32,7 +33,7 @@ server.tool(
 
 server.tool(
   "lookup_runbook",
-  "Fetch the verified runbookId and remediation checklist for one of the 8 symptom categories.",
+  catalog.toolDescriptions.lookup_runbook,
   LookupRunbookSchema,
   async ({ symptomTag }) => ({
     content: [{ type: "text", text: JSON.stringify(lookupRunbook(symptomTag)) }],
