@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
-from agentgate.cli import load_dotenv_file, load_scenarios, main
+import pytest
+
+from agentgate.cli import _build_parser, load_dotenv_file, load_scenarios, main, run_benchmark
 from agentgate.types import EvalSuiteReport
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -104,13 +106,77 @@ def test_load_dotenv_file_parses_values_and_preserves_os_env_precedence(tmp_path
     env_path.write_text(
         "# Comment line\n"
         "\n"
-        "GEMINI_MODEL=gemini-3.1-flash-lite\n"
-        'GEMINI_API_KEY="quoted-secret"\n',
+        "export GEMINI_MODEL=gemini-3.1-flash-lite # inline comment\n"
+        'GEMINI_API_KEY="quoted#secret" # trailing comment\n'
+        "LANGFUSE_HOST=https://langfuse.example#anchor\n",
         encoding="utf-8",
     )
 
     parsed = load_dotenv_file(env_path)
     assert parsed == {
         "GEMINI_MODEL": "gemini-3.1-flash-lite",
-        "GEMINI_API_KEY": "quoted-secret",
+        "GEMINI_API_KEY": "quoted#secret",
+        "LANGFUSE_HOST": "https://langfuse.example#anchor",
     }
+
+
+async def test_cli_validates_before_unlinking_traces_and_writes_report_before_langfuse_flush(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    traces = tmp_path / "existing-traces.jsonl"
+    traces.write_text("keep-me\n", encoding="utf-8")
+    out_report = tmp_path / "out-report.json"
+
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        await run_benchmark(
+            scenarios_path=_SCENARIOS_PATH,
+            output_path=out_report,
+            traces_path=traces,
+            mode="gemini",
+            env={},
+        )
+    assert traces.read_text(encoding="utf-8") == "keep-me\n"
+
+    with pytest.raises(FileNotFoundError):
+        await run_benchmark(
+            scenarios_path=_SCENARIOS_PATH,
+            output_path=out_report,
+            traces_path=traces,
+            mode="mcp",
+            mcp_server_path=tmp_path / "missing-server.js",
+            env={},
+        )
+    assert traces.read_text(encoding="utf-8") == "keep-me\n"
+
+    # Even if Langfuse flush fails on ExitStack exit, report JSON is already persisted.
+    import agentgate.cli as cli_mod
+
+    class _FailingLangfuseSink:
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+
+        def __enter__(self) -> "_FailingLangfuseSink":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            raise RuntimeError("langfuse flush failed")
+
+        def emit(self, span: object) -> None:
+            del span
+
+    monkeypatch.setattr(cli_mod, "LangfuseTraceSink", _FailingLangfuseSink)
+    with pytest.raises(RuntimeError, match="langfuse flush failed"):
+        await run_benchmark(
+            scenarios_path=_SCENARIOS_PATH,
+            output_path=out_report,
+            traces_path=traces,
+            mode="mcp",
+            env={"LANGFUSE_PUBLIC_KEY": "pk", "LANGFUSE_SECRET_KEY": "sk"},
+        )
+    assert out_report.exists()
+    persisted = EvalSuiteReport.model_validate_json(out_report.read_text(encoding="utf-8"))
+    assert persisted.total_cases == 20
+
+    args = _build_parser().parse_args(["--mode", "gemini"])
+    assert args.max_p95_ms is None

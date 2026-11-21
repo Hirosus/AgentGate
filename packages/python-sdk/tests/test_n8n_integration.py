@@ -33,7 +33,7 @@ def _simulate_n8n_envelope(
     idempotency_key = (
         str(raw_event_id) if raw_event_id is not None else f"n8n-{execution_id}"
     )
-    signed_message = f"{timestamp}.{raw_body_str}".encode()
+    signed_message = f"{timestamp}.{idempotency_key}.{raw_body_str}".encode()
     hex_digest = hmac.new(secret.encode("utf-8"), signed_message, hashlib.sha256).hexdigest()
 
     headers = {
@@ -41,7 +41,7 @@ def _simulate_n8n_envelope(
         "X-AgentGate-Source": "n8n",
         "X-AgentGate-Timestamp": str(timestamp),
         "X-AgentGate-Idempotency-Key": idempotency_key,
-        "X-AgentGate-Signature": f"v1={hex_digest}",
+        "X-AgentGate-Signature": f"v2={hex_digest}",
     }
     return headers, raw_body
 
@@ -92,10 +92,17 @@ def test_n8n_workflow_contract_has_single_timestamp_and_raw_body_signing() -> No
     assert crypto_params.get("type") == "SHA256"
     assert crypto_params.get("encoding") == "hex"
     assert crypto_params.get("dataPropertyName") == "signature"
-    assert crypto_params.get("value") == "={{ $json.timestamp + '.' + $json.rawBody }}"
+    assert (
+        crypto_params.get("value")
+        == "={{ $json.timestamp + '.' + $json.idempotencyKey + '.' + $json.rawBody }}"
+    )
 
     http_params = nodes_by_name["POST to AgentGate Ingress"].get("parameters")
     assert isinstance(http_params, dict)
+    url_expr = http_params.get("url")
+    assert isinstance(url_expr, str)
+    assert "/webhooks/triage" in url_expr
+    assert "replace" in url_expr or "trim" in url_expr
     assert http_params.get("sendBody") is True
     assert http_params.get("contentType") == "raw"
     assert http_params.get("body") == "={{ $json.rawBody }}"
@@ -104,15 +111,19 @@ def test_n8n_workflow_contract_has_single_timestamp_and_raw_body_signing() -> No
     assert isinstance(header_block, dict)
     raw_header_list = header_block.get("parameters")
     assert isinstance(raw_header_list, list)
-    header_names = {
-        item["name"] for item in raw_header_list if isinstance(item, dict) and "name" in item
+    header_values = {
+        item["name"]: item.get("value")
+        for item in raw_header_list
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
     assert {
         "X-AgentGate-Source",
         "X-AgentGate-Timestamp",
         "X-AgentGate-Idempotency-Key",
         "X-AgentGate-Signature",
-    }.issubset(header_names)
+    }.issubset(set(header_values))
+    sig_expr = header_values.get("X-AgentGate-Signature")
+    assert isinstance(sig_expr, str) and "'v2='" in sig_expr
 
 
 async def test_n8n_signed_delivery_roundtrip_against_fastapi_and_sqlite(tmp_path: Path) -> None:

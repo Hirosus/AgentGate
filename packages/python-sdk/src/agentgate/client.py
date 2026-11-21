@@ -18,6 +18,8 @@ class AgentGateClient:
         timeout_seconds: float = 10.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
+        if not webhook_secret:
+            raise ValueError("webhook_secret must be a non-empty string.")
         self._secret = webhook_secret
         self._client = httpx.Client(
             base_url=base_url,
@@ -50,19 +52,31 @@ class AgentGateClient:
         idempotency_key: str,
         timestamp: int,
         raw_body: bytes,
+        *,
+        source: str = "sdk",
+        content_type: str = "application/json",
+        raise_on_rejected: bool = True,
     ) -> IntakeDecision:
-        """Sign and dispatch a webhook payload, parsing the typed IntakeDecision."""
-        sig = sign_payload(secret=self._secret, timestamp=timestamp, raw_body=raw_body)
+        """Sign (`v2=`) and dispatch a webhook payload, parsing the typed IntakeDecision."""
+        sig = sign_payload(
+            secret=self._secret,
+            timestamp=timestamp,
+            raw_body=raw_body,
+            idempotency_key=idempotency_key,
+        )
         response = self._client.post(
             "/webhooks/triage",
             content=raw_body,
             headers={
-                "Content-Type": "application/json",
+                "Content-Type": content_type,
+                "X-AgentGate-Source": source,
                 "X-AgentGate-Timestamp": str(timestamp),
                 "X-AgentGate-Idempotency-Key": idempotency_key,
                 "X-AgentGate-Signature": sig,
             },
         )
+        if response.status_code == 401 and not raise_on_rejected:
+            return IntakeDecision.model_validate(response.json())
         response.raise_for_status()
         return IntakeDecision.model_validate(response.json())
 
@@ -77,6 +91,8 @@ class AsyncAgentGateClient:
         timeout_seconds: float = 10.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        if not webhook_secret:
+            raise ValueError("webhook_secret must be a non-empty string.")
         self._secret = webhook_secret
         self._client = httpx.AsyncClient(
             base_url=base_url,
@@ -109,18 +125,30 @@ class AsyncAgentGateClient:
         idempotency_key: str,
         timestamp: int,
         raw_body: bytes,
+        *,
+        source: str = "sdk",
+        content_type: str = "application/json",
+        raise_on_rejected: bool = True,
     ) -> IntakeDecision:
-        """Sign and dispatch a webhook payload asynchronously."""
-        sig = sign_payload(secret=self._secret, timestamp=timestamp, raw_body=raw_body)
+        """Sign (`v2=`) and dispatch a webhook payload asynchronously."""
+        sig = sign_payload(
+            secret=self._secret,
+            timestamp=timestamp,
+            raw_body=raw_body,
+            idempotency_key=idempotency_key,
+        )
         response = await self._client.post(
             "/webhooks/triage",
             content=raw_body,
             headers={
-                "Content-Type": "application/json",
+                "Content-Type": content_type,
+                "X-AgentGate-Source": source,
                 "X-AgentGate-Timestamp": str(timestamp),
                 "X-AgentGate-Idempotency-Key": idempotency_key,
                 "X-AgentGate-Signature": sig,
             },
         )
+        if response.status_code == 401 and not raise_on_rejected:
+            return IntakeDecision.model_validate(response.json())
         response.raise_for_status()
         return IntakeDecision.model_validate(response.json())

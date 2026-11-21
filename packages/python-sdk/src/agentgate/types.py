@@ -23,16 +23,6 @@ class WebhookEvent(BaseModel):
     source: str = Field(default="unknown", min_length=1)
 
 
-class IntakeDecision(BaseModel):
-    """Deterministic outcome returned by webhook verification."""
-
-    model_config = ConfigDict(frozen=True)
-
-    status: IntakeStatus
-    idempotency_key: str
-    reason: str
-
-
 class AgentOutput(BaseModel):
     """Structured triage output produced by a baseline or MCP-assisted runner."""
 
@@ -48,6 +38,17 @@ class AgentOutput(BaseModel):
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     pacing_wait_ms: float = Field(default=0.0, ge=0.0)
+
+
+class IntakeDecision(BaseModel):
+    """Deterministic outcome returned by webhook verification."""
+
+    model_config = ConfigDict(frozen=True)
+
+    status: IntakeStatus
+    idempotency_key: str
+    reason: str
+    triage: AgentOutput | None = None
 
 
 class EvalScenario(BaseModel):
@@ -82,6 +83,7 @@ class EvalCaseResult(BaseModel):
     tool_severity: Literal["low", "medium", "high", "critical"] | None = None
     tool_runbook: str | None = None
     tool_calls: int = Field(default=0, ge=0)
+    baseline_pacing_wait_ms: float = Field(default=0.0, ge=0.0)
     tool_pacing_wait_ms: float = Field(default=0.0, ge=0.0)
 
 
@@ -116,6 +118,7 @@ class EvalSuiteReport(BaseModel):
     baseline_injection_block_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     p95_baseline_latency_ms: float = Field(default=0.0, ge=0.0)
     baseline_total_tokens: int = Field(default=0, ge=0)
+    p95_baseline_net_latency_ms: float | None = Field(default=None, ge=0.0)
     p95_tool_net_latency_ms: float | None = Field(default=None, ge=0.0)
 
 

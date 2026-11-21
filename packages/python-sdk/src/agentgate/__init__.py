@@ -1,8 +1,13 @@
 """AgentGate public Python interface."""
 
-from agentgate.cli import HeuristicBaselineRunner, load_scenarios
+from agentgate.cli import (
+    HeuristicBaselineRunner,
+    load_dotenv_file,
+    load_scenarios,
+    run_benchmark,
+)
 from agentgate.client import AgentGateClient, AsyncAgentGateClient
-from agentgate.evaluator import evaluate_suite
+from agentgate.evaluator import DeterministicJudge, evaluate_suite
 from agentgate.ingress import (
     HttpResponse,
     IngressConfig,
@@ -13,6 +18,7 @@ from agentgate.llm_gemini import (
     GeminiApiError,
     GeminiConfig,
     GeminiToolRunner,
+    RequestPacer,
     sanitize_gemini_schema,
 )
 from agentgate.mcp_client import (
@@ -60,6 +66,7 @@ __all__ = [
     "AgentOutput",
     "AsyncAgentGateClient",
     "CompositeTraceSink",
+    "DeterministicJudge",
     "DynamoDbIdempotencyStore",
     "DynamoDbTableProtocol",
     "EvalCaseResult",
@@ -86,6 +93,7 @@ __all__ = [
     "McpToolCallResult",
     "McpToolDefinition",
     "McpTriageRunner",
+    "RequestPacer",
     "SqliteIdempotencyStore",
     "ToolRunner",
     "TraceSink",
@@ -96,7 +104,9 @@ __all__ = [
     "default_mcp_server_entrypoint",
     "evaluate_suite",
     "ingest_webhook",
+    "load_dotenv_file",
     "load_scenarios",
+    "run_benchmark",
     "sanitize_gemini_schema",
     "sign_payload",
     "verify_signature",

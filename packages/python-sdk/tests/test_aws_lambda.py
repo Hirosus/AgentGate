@@ -52,7 +52,12 @@ def test_lambda_handler_health_check_v2_and_stage_prefix() -> None:
 def test_lambda_handler_accepts_signed_webhook_then_marks_duplicate() -> None:
     fn = build_lambda_handler(_make_ingress())
     raw_text = '{"incident":"INC-501"}'
-    sig = sign_payload("lambda-secret", 1_700_000_005, raw_text.encode("utf-8"))
+    sig = sign_payload(
+        "lambda-secret",
+        1_700_000_005,
+        raw_text.encode("utf-8"),
+        idempotency_key="evt-lam-1",
+    )
     headers = {
         "X-AgentGate-Idempotency-Key": "evt-lam-1",
         "X-AgentGate-Timestamp": "1700000005",
@@ -91,6 +96,12 @@ def test_lambda_handler_accepts_signed_webhook_then_marks_duplicate() -> None:
     assert isinstance(dup_body, str)
     assert json.loads(dup_body)["status"] == "duplicate"
 
+    sig_staged = sign_payload(
+        "lambda-secret",
+        1_700_000_005,
+        raw_text.encode("utf-8"),
+        idempotency_key="evt-lam-2",
+    )
     staged = fn(
         {
             "version": "2.0",
@@ -98,6 +109,7 @@ def test_lambda_handler_accepts_signed_webhook_then_marks_duplicate() -> None:
             "headers": {
                 **headers,
                 "X-AgentGate-Idempotency-Key": "evt-lam-2",
+                "X-AgentGate-Signature": sig_staged,
             },
             "body": raw_text,
             "isBase64Encoded": False,
@@ -114,7 +126,7 @@ def test_lambda_handler_accepts_signed_webhook_then_marks_duplicate() -> None:
 def test_lambda_handler_decodes_base64_body_before_hmac_verification() -> None:
     fn = build_lambda_handler(_make_ingress())
     raw_bytes = b'{\n "alert": "db_pool" \n}'
-    sig = sign_payload("lambda-secret", 1_700_000_005, raw_bytes)
+    sig = sign_payload("lambda-secret", 1_700_000_005, raw_bytes, idempotency_key="evt-b64")
     encoded = base64.b64encode(raw_bytes).decode("ascii")
 
     ok = fn(
@@ -201,10 +213,20 @@ def test_lambda_handler_rejects_bad_signature_and_unknown_routes() -> None:
         },
         None,
     )
-    assert wrong_method["statusCode"] == 404
+    assert wrong_method["statusCode"] == 405
     wrong_body = wrong_method["body"]
     assert isinstance(wrong_body, str)
     assert "detail" in json.loads(wrong_body)
+
+    wrong_health_method = fn(
+        {
+            "version": "2.0",
+            "rawPath": "/health",
+            "requestContext": {"http": {"method": "POST"}},
+        },
+        None,
+    )
+    assert wrong_health_method["statusCode"] == 405
 
 
 def test_default_module_handler_initializes_from_environment(
@@ -237,8 +259,71 @@ def test_sam_template_contract_matches_linux_lambda_bundle() -> None:
     assert re.search(r"Architectures:\s*\n\s*-\s*x86_64", text) is not None
     assert "CodeUri: build/lambda/" in text
     assert "Handler: agentgate.aws_lambda.handler" in text
+    assert "MinLength: 32" in text
     assert "AGENTGATE_STORE_BACKEND: dynamodb" in text
     assert "IDEMPOTENCY_TABLE: !Ref IdempotencyTable" in text
-    assert "REPORTS_BUCKET: !Ref EvalReportsBucket" in text
+    assert "REPORTS_BUCKET" not in text
+    assert "PutItem" in text
+    assert "DeleteItem" in text
     assert "Path: /health" in text
     assert "Path: /webhooks/triage" in text
+
+
+def test_lambda_handler_handles_v1_path_bytes_base64_multivalue_headers_and_triage() -> None:
+    now = 1_700_000_010
+    store = InMemoryIdempotencyStore(current_time=now)
+    ingress = WebhookIngress(
+        config=IngressConfig(webhook_secret="lambda-secret", triage_mode="deterministic"),
+        store=store,
+        now_fn=lambda: now,
+    )
+    fn = build_lambda_handler(ingress)
+
+    # REST API v1 event (`path` instead of `rawPath`) must not strip `/prod` from path.
+    v1_not_found = fn(
+        {
+            "httpMethod": "GET",
+            "path": "/prod/health",
+            "requestContext": {"stage": "prod"},
+        },
+        None,
+    )
+    assert v1_not_found["statusCode"] == 404
+
+    raw_bytes = b'{"service":"checkout-api","p95_ms":820,"msg":"SELECT FOR UPDATE"}'
+    sig = sign_payload("lambda-secret", now - 2, raw_bytes, idempotency_key="evt-b64-bytes")
+    ok_bytes = fn(
+        {
+            "httpMethod": "POST",
+            "path": "/webhooks/triage",
+            "headers": {
+                "X-AgentGate-Idempotency-Key": "evt-b64-bytes",
+                "X-AgentGate-Timestamp": str(now - 2),
+                "X-AgentGate-Signature": sig,
+            },
+            "body": base64.b64encode(raw_bytes),
+            "isBase64Encoded": True,
+        },
+        None,
+    )
+    assert ok_bytes["statusCode"] == 200
+    assert isinstance(ok_bytes["body"], str)
+    parsed = json.loads(ok_bytes["body"])
+    assert parsed["status"] == "accepted"
+    assert parsed["triage"]["recommended_runbook"] == "rb-latency-pool"
+
+    dup_mv = fn(
+        {
+            "httpMethod": "POST",
+            "path": "/webhooks/triage",
+            "multiValueHeaders": {
+                "X-AgentGate-Idempotency-Key": ["evt-mv-1"],
+                "X-AgentGate-Timestamp": [str(now - 2)],
+                "X-AgentGate-Signature": [sig, sig],
+            },
+            "body": "{}",
+            "isBase64Encoded": False,
+        },
+        None,
+    )
+    assert dup_mv["statusCode"] == 400

@@ -1,11 +1,13 @@
-"""Tests for SQLite and DynamoDB IdempotencyStore adapters."""
+"""Tests for InMemory, SQLite, and DynamoDB IdempotencyStore adapters."""
 
+import sqlite3
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
+from agentgate.seams import InMemoryIdempotencyStore
 from agentgate.stores import DynamoDbIdempotencyStore, SqliteIdempotencyStore
 from agentgate.types import WebhookEvent
 from agentgate.webhook import ingest_webhook, sign_payload
@@ -15,7 +17,7 @@ def test_sqlite_store_claims_once_and_rejects_duplicate(tmp_path: Path) -> None:
     db_path = tmp_path / "nested" / "agentgate.db"
     raw = b'{"incident":"INC-201"}'
     event = WebhookEvent(idempotency_key="evt-201", timestamp=1_700_000_000, raw_body=raw)
-    sig = sign_payload("top-secret", event.timestamp, raw)
+    sig = sign_payload("top-secret", event.timestamp, raw, idempotency_key=event.idempotency_key)
 
     with SqliteIdempotencyStore(db_path=db_path, now_fn=lambda: 1_700_000_010) as store:
         assert db_path.exists()
@@ -117,13 +119,19 @@ class _FakeDynamoDbTable:
         self.items[key] = {"idempotency_key": key, "expires_at": expires_at}
         return {"ResponseMetadata": {"HTTPStatusCode": 200}}
 
+    def delete_item(self, *, Key: Mapping[str, str]) -> object:
+        if self.fail_with_code is not None:
+            raise _FakeClientError({"Error": {"Code": self.fail_with_code}})
+        self.items.pop(Key["idempotency_key"], None)
+        return {"ResponseMetadata": {"HTTPStatusCode": 200}}
+
 
 def test_dynamodb_store_claims_and_rejects_duplicate_via_conditional_put() -> None:
     table = _FakeDynamoDbTable()
     store = DynamoDbIdempotencyStore(table=table, now_fn=lambda: 1_700_000_010)
     raw = b'{"incident":"INC-301"}'
     event = WebhookEvent(idempotency_key="evt-ddb-1", timestamp=1_700_000_000, raw_body=raw)
-    sig = sign_payload("top-secret", event.timestamp, raw)
+    sig = sign_payload("top-secret", event.timestamp, raw, idempotency_key=event.idempotency_key)
 
     first = ingest_webhook(event, sig, "top-secret", store, now_timestamp=1_700_000_010)
     second = ingest_webhook(event, sig, "top-secret", store, now_timestamp=1_700_000_020)
@@ -162,3 +170,52 @@ def test_dynamodb_store_propagates_non_conditional_errors_and_validates_inputs()
         store.claim("evt-ddb-ok", ttl_seconds=0)
     with pytest.raises(ValueError):
         store.claim("evt-ddb-ok", ttl_seconds=-5)
+
+
+def test_in_memory_store_live_clock_pruning_release_and_validation() -> None:
+    clock = [100.0]
+    live_store = InMemoryIdempotencyStore(now_fn=lambda: clock[0])
+    assert live_store.claim("k1", ttl_seconds=10) is True
+    assert live_store.claim("k1", ttl_seconds=10) is False
+    clock[0] = 110.0
+    assert live_store.claim("k2", ttl_seconds=10) is True
+    # k1 was opportunistically pruned on claim("k2")
+    assert "k1" not in live_store._claims
+
+    live_store.release("k2")
+    assert live_store.claim("k2", ttl_seconds=10) is True
+
+    default_store = InMemoryIdempotencyStore()
+    assert default_store.claim("live-key", ttl_seconds=5) is True
+    assert default_store.claim("live-key", ttl_seconds=5) is False
+
+    with pytest.raises(ValueError):
+        live_store.claim("", ttl_seconds=10)
+    with pytest.raises(ValueError):
+        live_store.claim("k3", ttl_seconds=0)
+    with pytest.raises(ValueError):
+        InMemoryIdempotencyStore(current_time=10, now_fn=lambda: 10.0)
+
+
+def test_sqlite_and_dynamodb_store_release_and_pruning(tmp_path: Path) -> None:
+    db_path = tmp_path / "prune.db"
+    clock = [1_000]
+    with SqliteIdempotencyStore(db_path=db_path, now_fn=lambda: clock[0]) as store:
+        assert store.claim("stale-1", ttl_seconds=10) is True
+        assert store.claim("active-1", ttl_seconds=100) is True
+        store.release("active-1")
+        assert store.claim("active-1", ttl_seconds=100) is True
+
+        clock[0] = 1_015
+        assert store.claim("fresh-1", ttl_seconds=50) is True
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute("SELECT idempotency_key FROM idempotency_claims").fetchall()
+    assert {row[0] for row in rows} == {"active-1", "fresh-1"}
+
+    table = _FakeDynamoDbTable()
+    ddb = DynamoDbIdempotencyStore(table=table, now_fn=lambda: 1_000)
+    assert ddb.claim("ddb-rel", ttl_seconds=60) is True
+    ddb.release("ddb-rel")
+    assert "ddb-rel" not in table.items
+    assert ddb.claim("ddb-rel", ttl_seconds=60) is True

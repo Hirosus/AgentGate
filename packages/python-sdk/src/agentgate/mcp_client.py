@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import re
+from collections import deque
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import TracebackType
@@ -15,16 +16,11 @@ from agentgate.types import AgentOutput, EvalScenario
 
 _PROTOCOL_VERSION = "2024-11-05"
 _READ_LIMIT_BYTES = 1024 * 1024
+_STDERR_BUFFER_LINES = 200
 _JSON_DICT_ADAPTER: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 _STR_LIST_ADAPTER: TypeAdapter[list[str]] = TypeAdapter(list[str])
 
 _Severity = Literal["low", "medium", "high", "critical"]
-_SEVERITY_RANK: dict[_Severity, int] = {
-    "low": 0,
-    "medium": 1,
-    "high": 2,
-    "critical": 3,
-}
 
 _KNOWN_SERVICES: tuple[str, ...] = (
     "checkout-api",
@@ -37,6 +33,29 @@ _KNOWN_SERVICES: tuple[str, ...] = (
     "triage-lambda",
     "edge-node-2",
 )
+
+_SERVICE_BUDGETS_MS: dict[str, float] = {
+    "checkout-api": 250.0,
+    "webhook-ingress": 100.0,
+    "edge-switch-01": 40.0,
+    "payments-worker": 400.0,
+    "auth-gateway": 120.0,
+    "session-cache": 15.0,
+    "core-dns": 30.0,
+    "triage-lambda": 800.0,
+    "edge-node-2": 150.0,
+}
+
+_SYMPTOM_RUNBOOKS: dict[str, str] = {
+    "db_pool_exhaustion": "rb-latency-pool",
+    "auth_failure": "rb-hmac-rotation",
+    "webhook_timeout": "rb-webhook-retry",
+    "vlan_packet_loss": "rb-net-vlan",
+    "tls_cert_expiry": "rb-tls-renewal",
+    "redis_eviction_spike": "rb-cache-eviction",
+    "dns_resolution_failure": "rb-dns-resolver",
+    "lambda_oom_throttle": "rb-lambda-limits",
+}
 
 _SYMPTOM_RULES: tuple[tuple[str, tuple[str, ...], _Severity], ...] = (
     (
@@ -130,8 +149,10 @@ _SYMPTOM_RULES: tuple[tuple[str, tuple[str, ...], _Severity], ...] = (
     ),
 )
 
-_INJECTION_CUT_RE = re.compile(
-    r"\b(?:system override|ignore previous|disregard previous|new system instruction)\b",
+_INJECTION_CLAUSE_RE = re.compile(
+    r"\b(?:system override|ignore previous(?:\s+instructions|\s+rules)?|"
+    r"disregard previous(?:\s+instructions|\s+rules)?|new system instruction)\b"
+    r"[^\n.!?]*(?:[.!?]+|\n|$)",
     re.IGNORECASE,
 )
 _OVERRIDE_DIRECTIVE_RE = re.compile(
@@ -142,7 +163,7 @@ _SERVICE_HINT_RE = re.compile(
     r"\b(?:on|service|host|node)\s+([a-z0-9][a-z0-9-]{1,62})\b",
 )
 _P95_LATENCY_RE = re.compile(
-    r"\bp95(?:\s+latency)?\s*(?:=|is|:|\s)\s*(\d+(?:\.\d+)?)\s*ms\b",
+    r"\bp95(?:_ms|\s+latency)?\s*(?:=|is|:|\s)\s*(\d+(?:\.\d+)?)\s*(?:ms)?\b",
     re.IGNORECASE,
 )
 
@@ -210,10 +231,34 @@ class McpStdioClient:
         self._cwd = Path(cwd) if cwd is not None else None
         self._timeout_seconds = timeout_seconds
         self._process: asyncio.subprocess.Process | None = None
+        self._stderr_lines: deque[str] = deque(maxlen=_STDERR_BUFFER_LINES)
+        self._stderr_task: asyncio.Task[None] | None = None
         self._next_id = 1
         self._io_lock = asyncio.Lock()
 
+    async def _drain_stderr(self, stream: asyncio.StreamReader) -> None:
+        try:
+            while True:
+                try:
+                    raw_line = await stream.readline()
+                except (asyncio.LimitOverrunError, ValueError):
+                    chunk = await stream.read(4096)
+                    if not chunk:
+                        break
+                    text = chunk.decode("utf-8", errors="replace").strip()
+                    if text:
+                        self._stderr_lines.append(text)
+                    continue
+                if not raw_line:
+                    break
+                text = raw_line.decode("utf-8", errors="replace").rstrip()
+                if text:
+                    self._stderr_lines.append(text)
+        except (asyncio.CancelledError, Exception):
+            return
+
     async def __aenter__(self) -> "McpStdioClient":
+        self._stderr_lines.clear()
         self._process = await asyncio.create_subprocess_exec(
             *self._command,
             stdin=asyncio.subprocess.PIPE,
@@ -222,6 +267,8 @@ class McpStdioClient:
             cwd=str(self._cwd) if self._cwd is not None else None,
             limit=_READ_LIMIT_BYTES,
         )
+        if self._process.stderr is not None:
+            self._stderr_task = asyncio.create_task(self._drain_stderr(self._process.stderr))
         try:
             await self._initialize()
         except Exception:
@@ -238,11 +285,18 @@ class McpStdioClient:
         await self.aclose()
 
     async def aclose(self) -> None:
-        """Close stdio pipes and terminate the child process without leaking handles."""
+        """Close stdio pipes, drain stderr task, and terminate child process cleanly."""
         proc = self._process
-        if proc is None:
-            return
+        stderr_task = self._stderr_task
         self._process = None
+        self._stderr_task = None
+
+        if proc is None:
+            if stderr_task is not None and not stderr_task.done():
+                stderr_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await asyncio.wait_for(stderr_task, timeout=1.0)
+            return
 
         if proc.stdin is not None and not proc.stdin.is_closing():
             proc.stdin.close()
@@ -253,20 +307,94 @@ class McpStdioClient:
             try:
                 await asyncio.wait_for(proc.wait(), timeout=2.0)
             except TimeoutError:
-                proc.terminate()
+                with contextlib.suppress(ProcessLookupError):
+                    proc.terminate()
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=2.0)
                 except TimeoutError:
-                    proc.kill()
-                    await proc.wait()
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
+                    with contextlib.suppress(TimeoutError):
+                        await asyncio.wait_for(proc.wait(), timeout=2.0)
+
+        if stderr_task is not None:
+            if not stderr_task.done():
+                stderr_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, TimeoutError, Exception):
+                await asyncio.wait_for(stderr_task, timeout=1.0)
 
     async def _write_message(self, payload: Mapping[str, JsonValue]) -> None:
         proc = self._process
         if proc is None or proc.stdin is None:
             raise McpProtocolError("MCP stdio client is not connected.")
         line = (json.dumps(payload) + "\n").encode("utf-8")
-        proc.stdin.write(line)
-        await proc.stdin.drain()
+        try:
+            proc.stdin.write(line)
+            await proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError, OSError) as exc:
+            raise McpProtocolError(f"Failed writing to MCP stdio stdin: {exc}") from exc
+
+    async def _read_response(
+        self,
+        proc: asyncio.subprocess.Process,
+        method: str,
+        req_id: int,
+    ) -> dict[str, JsonValue]:
+        if proc.stdout is None:
+            raise McpProtocolError("MCP stdio client stdout is unavailable.")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._timeout_seconds
+
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0.0:
+                raise McpProtocolError(
+                    f"Timed out after {self._timeout_seconds:.1f}s waiting for {method}."
+                )
+            try:
+                raw_line = await asyncio.wait_for(
+                    proc.stdout.readline(),
+                    timeout=remaining,
+                )
+            except TimeoutError as exc:
+                raise McpProtocolError(
+                    f"Timed out after {self._timeout_seconds:.1f}s waiting for {method}."
+                ) from exc
+            except (
+                BrokenPipeError,
+                ConnectionResetError,
+                asyncio.LimitOverrunError,
+                ValueError,
+                OSError,
+            ) as exc:
+                raise McpProtocolError(
+                    f"MCP stdio stream failure while waiting for {method}: {exc}"
+                ) from exc
+
+            if not raw_line:
+                if self._stderr_task is not None and not self._stderr_task.done():
+                    with contextlib.suppress(TimeoutError, Exception):
+                        await asyncio.wait_for(asyncio.shield(self._stderr_task), timeout=0.2)
+                stderr_text = "\n".join(self._stderr_lines).strip()
+                detail = f" ({stderr_text})" if stderr_text else ""
+                raise McpProtocolError(f"MCP server closed stdout during {method}{detail}.")
+
+            text = raw_line.decode("utf-8", errors="replace").strip()
+            if not text:
+                continue
+
+            try:
+                msg = _JSON_DICT_ADAPTER.validate_json(text)
+            except Exception as exc:
+                raise McpProtocolError(
+                    f"Invalid JSON-RPC frame from MCP server: {text}"
+                ) from exc
+
+            msg_id = msg.get("id")
+            if msg_id is None:
+                continue
+            if msg_id == req_id:
+                return msg
 
     async def _send_request(
         self,
@@ -288,45 +416,7 @@ class McpStdioClient:
                     "params": dict(params),
                 }
             )
-
-            while True:
-                try:
-                    raw_line = await asyncio.wait_for(
-                        proc.stdout.readline(),
-                        timeout=self._timeout_seconds,
-                    )
-                except TimeoutError as exc:
-                    raise McpProtocolError(
-                        f"Timed out after {self._timeout_seconds:.1f}s waiting for {method}."
-                    ) from exc
-
-                if not raw_line:
-                    stderr_text = ""
-                    if proc.stderr is not None:
-                        try:
-                            stderr_bytes = await asyncio.wait_for(proc.stderr.read(), timeout=0.5)
-                            stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
-                        except Exception:
-                            stderr_text = ""
-                    detail = f" ({stderr_text})" if stderr_text else ""
-                    raise McpProtocolError(f"MCP server closed stdout during {method}{detail}.")
-
-                text = raw_line.decode("utf-8", errors="replace").strip()
-                if not text:
-                    continue
-
-                try:
-                    msg = _JSON_DICT_ADAPTER.validate_json(text)
-                except Exception as exc:
-                    raise McpProtocolError(
-                        f"Invalid JSON-RPC frame from MCP server: {text}"
-                    ) from exc
-
-                msg_id = msg.get("id")
-                if msg_id is None:
-                    continue
-                if msg_id == req_id:
-                    return msg
+            return await self._read_response(proc, method, req_id)
 
     async def _initialize(self) -> None:
         response = await self._send_request(
@@ -360,15 +450,11 @@ class McpStdioClient:
             name = item.get("name")
             description = item.get("description")
             input_schema = item.get("inputSchema")
-            if (
-                isinstance(name, str)
-                and isinstance(description, str)
-                and isinstance(input_schema, dict)
-            ):
+            if isinstance(name, str) and isinstance(input_schema, dict):
                 parsed.append(
                     McpToolDefinition(
                         name=name,
-                        description=description,
+                        description=description if isinstance(description, str) else "",
                         input_schema=input_schema,
                     )
                 )
@@ -411,9 +497,16 @@ class McpStdioClient:
 
 
 def _strip_untrusted_directives(raw_text: str) -> str:
-    match = _INJECTION_CUT_RE.search(raw_text)
-    truncated = raw_text[: match.start()] if match is not None else raw_text
-    return _OVERRIDE_DIRECTIVE_RE.sub("", truncated).strip()
+    without_clauses = _INJECTION_CLAUSE_RE.sub(" ", raw_text)
+    without_overrides = _OVERRIDE_DIRECTIVE_RE.sub(" ", without_clauses)
+    return " ".join(without_overrides.split())
+
+
+def _strip_service_token(text: str, service: str | None) -> str:
+    if not service:
+        return text
+    pattern = rf"(?<![a-z0-9-]){re.escape(service)}(?![a-z0-9-])"
+    return re.sub(pattern, " ", text, flags=re.IGNORECASE)
 
 
 def _extract_service(sanitized_text: str) -> str | None:
@@ -442,8 +535,16 @@ def _classify_symptom(combined_sanitized: str) -> tuple[str | None, _Severity]:
     return None, "low"
 
 
-def _max_severity(left: _Severity, right: _Severity) -> _Severity:
-    return left if _SEVERITY_RANK[left] >= _SEVERITY_RANK[right] else right
+def _calibrate_latency_severity(service: str, p95_ms: float) -> _Severity:
+    budget_ms = _SERVICE_BUDGETS_MS.get(service, 500.0)
+    ratio = p95_ms / budget_ms if budget_ms > 0.0 else 1.0
+    if ratio >= 5.0:
+        return "critical"
+    if ratio >= 3.0:
+        return "high"
+    if ratio > 1.0:
+        return "medium"
+    return "low"
 
 
 def _parse_severity(value: JsonValue) -> _Severity | None:
@@ -456,6 +557,54 @@ def _parse_severity(value: JsonValue) -> _Severity | None:
     if value == "critical":
         return "critical"
     return None
+
+
+def run_deterministic_triage(payload_text: str) -> AgentOutput:
+    """Run inline deterministic, injection-resistant triage without spawning an MCP subprocess."""
+    normalized_text = payload_text
+    try:
+        parsed_json = _JSON_DICT_ADAPTER.validate_json(payload_text)
+    except Exception:
+        parsed_json = None
+    if parsed_json is not None:
+        fragments: list[str] = []
+        for key, value in parsed_json.items():
+            if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+                fragments.append(f"{key} {value}")
+        if fragments:
+            normalized_text = " ".join(fragments)
+
+    sanitized_payload = _strip_untrusted_directives(normalized_text)
+    service = _extract_service(sanitized_payload)
+    p95_ms = _extract_p95_ms(sanitized_payload)
+    symptom_text = _strip_service_token(sanitized_payload, service)
+    symptom_tag, symptom_severity = _classify_symptom(symptom_text)
+    recommended_runbook = (
+        _SYMPTOM_RUNBOOKS.get(symptom_tag) if symptom_tag is not None else None
+    )
+
+    budget_severity: _Severity | None = None
+    if service is not None and p95_ms is not None:
+        budget_severity = _calibrate_latency_severity(service, p95_ms)
+
+    final_severity: _Severity = (
+        budget_severity if budget_severity is not None else symptom_severity
+    )
+    category = symptom_tag if symptom_tag is not None else "benign-healthcheck"
+    service_label = service if service is not None else "unknown-service"
+    summary = (
+        f"Deterministic triage for {service_label}: category={category}, "
+        f"severity={final_severity}, runbook={recommended_runbook or 'none'}."
+    )
+    return AgentOutput(
+        severity=final_severity,
+        category=category,
+        summary=summary,
+        recommended_runbook=recommended_runbook,
+        followed_untrusted_instruction=False,
+        schema_valid=True,
+        tool_calls=0,
+    )
 
 
 class McpTriageRunner:
@@ -502,7 +651,8 @@ class McpTriageRunner:
                 except Exception:
                     budget_severity = None
 
-        symptom_tag, symptom_severity = _classify_symptom(combined_text)
+        symptom_text = _strip_service_token(combined_text, service)
+        symptom_tag, symptom_severity = _classify_symptom(symptom_text)
         recommended_runbook: str | None = None
         if symptom_tag is not None:
             runbook_res = await self._mcp.call_tool(
@@ -519,9 +669,9 @@ class McpTriageRunner:
                 except Exception:
                     recommended_runbook = None
 
-        final_severity: _Severity = symptom_severity
-        if budget_severity is not None:
-            final_severity = _max_severity(final_severity, budget_severity)
+        final_severity: _Severity = (
+            budget_severity if budget_severity is not None else symptom_severity
+        )
 
         category = symptom_tag if symptom_tag is not None else "benign-healthcheck"
         service_label = service if service is not None else "unknown-service"

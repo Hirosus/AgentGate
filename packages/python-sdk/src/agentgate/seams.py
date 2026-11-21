@@ -1,5 +1,8 @@
 """Explicit Protocol seams and in-memory adapters for fast, isolated testing."""
 
+import threading
+import time
+from collections.abc import Callable
 from typing import Protocol
 
 from agentgate.types import AgentOutput, EvalScenario, TraceSpan
@@ -10,6 +13,10 @@ class IdempotencyStore(Protocol):
 
     def claim(self, key: str, ttl_seconds: int) -> bool:
         """Atomically claim `key` for `ttl_seconds`; return False if already claimed."""
+        ...
+
+    def release(self, key: str) -> None:
+        """Release a previously claimed `key` so a failed delivery can be retried."""
         ...
 
 
@@ -38,23 +45,61 @@ class TraceSink(Protocol):
 
 
 class InMemoryIdempotencyStore:
-    """In-memory IdempotencyStore adapter with deterministic clock support."""
+    """Thread-safe in-memory IdempotencyStore adapter with live or deterministic clocks."""
 
-    def __init__(self, current_time: int = 0) -> None:
-        self._now = current_time
-        self._claims: dict[str, int] = {}
+    def __init__(
+        self,
+        current_time: float | None = None,
+        now_fn: Callable[[], float] | None = None,
+    ) -> None:
+        if current_time is not None and now_fn is not None:
+            raise ValueError("Specify at most one of current_time or now_fn.")
+        self._lock = threading.Lock()
+        self._manual_now: float | None = float(current_time) if current_time is not None else None
+        self._now_fn: Callable[[], float] | None = (
+            now_fn if now_fn is not None else (None if current_time is not None else time.time)
+        )
+        self._time_offset: float = 0.0
+        self._claims: dict[str, float] = {}
 
-    def advance_time(self, seconds: int) -> None:
+    def _current_now_unlocked(self) -> float:
+        if self._manual_now is not None:
+            return self._manual_now
+        assert self._now_fn is not None
+        return float(self._now_fn()) + self._time_offset
+
+    def advance_time(self, seconds: float) -> None:
         """Advance logical time for deterministic TTL expiration tests."""
-        self._now += seconds
+        with self._lock:
+            if self._manual_now is not None:
+                self._manual_now += seconds
+            else:
+                self._time_offset += seconds
 
     def claim(self, key: str, ttl_seconds: int) -> bool:
-        """Claim `key` unless an unexpired claim already exists."""
-        expires_at = self._claims.get(key)
-        if expires_at is not None and expires_at > self._now:
-            return False
-        self._claims[key] = self._now + ttl_seconds
-        return True
+        """Claim `key` unless an unexpired claim already exists, pruning expired entries."""
+        if not key:
+            raise ValueError("idempotency key must be a non-empty string.")
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be a positive integer.")
+
+        with self._lock:
+            now = self._current_now_unlocked()
+            expired_keys = [k for k, exp in self._claims.items() if exp <= now]
+            for expired_key in expired_keys:
+                del self._claims[expired_key]
+
+            if key in self._claims:
+                return False
+            self._claims[key] = now + ttl_seconds
+            return True
+
+    def release(self, key: str) -> None:
+        """Release a previously claimed `key` so a failed downstream run can retry."""
+        if not key:
+            raise ValueError("idempotency key must be a non-empty string.")
+        with self._lock:
+            self._claims.pop(key, None)
 
 
 class InMemoryTraceSink:

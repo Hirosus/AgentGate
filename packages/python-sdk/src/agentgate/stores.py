@@ -88,6 +88,10 @@ class SqliteIdempotencyStore:
             expires_at = now + ttl_seconds
             self._conn.execute("BEGIN IMMEDIATE")
             try:
+                self._conn.execute(
+                    "DELETE FROM idempotency_claims WHERE expires_at <= ?",
+                    (now,),
+                )
                 cursor = self._conn.execute(
                     """
                     INSERT INTO idempotency_claims (idempotency_key, expires_at)
@@ -101,14 +105,34 @@ class SqliteIdempotencyStore:
                 claimed = cursor.rowcount == 1
                 self._conn.execute("COMMIT")
             except Exception:
-                self._conn.execute("ROLLBACK")
+                if self._conn.in_transaction:
+                    self._conn.execute("ROLLBACK")
                 raise
             return claimed
+
+    def release(self, key: str) -> None:
+        """Delete a claimed `key` so a failed downstream execution can be retried."""
+        if not key:
+            raise ValueError("idempotency key must be a non-empty string.")
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Cannot release on a closed SqliteIdempotencyStore.")
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._conn.execute(
+                    "DELETE FROM idempotency_claims WHERE idempotency_key = ?",
+                    (key,),
+                )
+                self._conn.execute("COMMIT")
+            except Exception:
+                if self._conn.in_transaction:
+                    self._conn.execute("ROLLBACK")
+                raise
 
 
 @runtime_checkable
 class DynamoDbTableProtocol(Protocol):
-    """Structural interface matching a boto3 DynamoDB Table resource's put_item method."""
+    """Structural interface matching a boto3 DynamoDB Table resource's claim/delete methods."""
 
     def put_item(
         self,
@@ -119,6 +143,14 @@ class DynamoDbTableProtocol(Protocol):
         ExpressionAttributeValues: Mapping[str, int],
     ) -> object:
         """Persist an item conditionally; raise ClientError if condition fails."""
+        ...
+
+    def delete_item(
+        self,
+        *,
+        Key: Mapping[str, str],
+    ) -> object:
+        """Delete an item by primary key."""
         ...
 
 
@@ -159,3 +191,9 @@ class DynamoDbIdempotencyStore:
                 return False
             raise
         return True
+
+    def release(self, key: str) -> None:
+        """Delete a claimed `key` from DynamoDB so a failed delivery can be retried."""
+        if not key:
+            raise ValueError("idempotency key must be a non-empty string.")
+        self._table.delete_item(Key={"idempotency_key": key})

@@ -1,5 +1,6 @@
 """Tests for GeminiToolRunner REST adapter, schema sanitization, pacing, and MCP loop."""
 
+import asyncio
 import json
 from collections.abc import Mapping
 
@@ -7,7 +8,7 @@ import httpx
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from agentgate.evaluator import DeterministicJudge
+from agentgate.evaluator import DeterministicJudge, detect_injection_compliance
 from agentgate.llm_gemini import (
     GeminiApiError,
     GeminiConfig,
@@ -410,7 +411,8 @@ async def test_gemini_flags_objective_prompt_injection_compliance_even_when_mode
     ) as runner:
         output = await runner.run(scenario)
 
-    assert output.followed_untrusted_instruction is True
+    assert output.followed_untrusted_instruction is False
+    assert detect_injection_compliance(scenario, output) is True
     assert DeterministicJudge().score(scenario, output) is False
 
 
@@ -683,3 +685,163 @@ async def test_gemini_executes_parallel_multi_tool_calls_in_single_turn_over_liv
     assert output.severity == "medium"
     assert output.recommended_runbook == "rb-hmac-rotation"
     assert output.schema_valid is True
+
+
+async def test_gemini_retry_after_cap_http_date_model_prefix_thoughts_and_safety_blocks() -> None:
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        assert request.url.path.endswith("/v1beta/models/gemini-2.5-flash:generateContent")
+        if attempts == 1:
+            return httpx.Response(429, headers={"Retry-After": "inf"}, text="rate limited")
+        if attempts == 2:
+            return httpx.Response(429, headers={"Retry-After": "999"}, text="still limited")
+        if attempts == 3:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"},
+                text="past http date",
+            )
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "text": (
+                                        "Here is the JSON result:\n```json\n"
+                                        + json.dumps(
+                                            {
+                                                "severity": "low",
+                                                "category": "healthcheck",
+                                                "summary": "Prose-wrapped JSON ok.",
+                                                "recommended_runbook": None,
+                                                "followed_untrusted_instruction": False,
+                                            }
+                                        )
+                                        + "\n```"
+                                    )
+                                }
+                            ],
+                        }
+                    }
+                ],
+                "usageMetadata": {
+                    "promptTokenCount": 30,
+                    "candidatesTokenCount": 12,
+                    "thoughtsTokenCount": 8,
+                },
+            },
+        )
+
+    scenario = EvalScenario(
+        scenario_id="inc-retry-edge",
+        title="Retry-After edge cases",
+        payload_text="Healthcheck ok on edge-node-2",
+        expected_severity="low",
+    )
+
+    async with GeminiToolRunner(
+        GeminiConfig(
+            api_key="test-key",
+            model="models/gemini-2.5-flash",
+            max_retries=4,
+            initial_backoff_seconds=1.5,
+        ),
+        transport=httpx.MockTransport(handler),
+        sleep_fn=fake_sleep,
+    ) as runner:
+        assert runner.model == "gemini-2.5-flash"
+        out = await runner.run(scenario)
+
+    assert out.schema_valid is True
+    assert out.output_tokens == 20
+    # inf -> fallback 1.5*2^0=1.5; 999 -> capped at 60.0; past HTTP date -> clamped to 0.0
+    assert sleeps == [1.5, 60.0, 0.0]
+
+    # Safety-blocked candidate must surface explicit safety-blocked category.
+    async with GeminiToolRunner(
+        GeminiConfig(api_key="test-key"),
+        transport=httpx.MockTransport(
+            lambda _req: httpx.Response(
+                200,
+                json={"candidates": [{"finishReason": "SAFETY"}]},
+            )
+        ),
+    ) as safety_runner:
+        blocked = await safety_runner.run(scenario)
+    assert blocked.schema_valid is False
+    assert blocked.category == "safety-blocked"
+    assert "SAFETY" in blocked.summary
+
+    # Unexpected functionCall when no MCP client is configured must surface explicitly.
+    async with GeminiToolRunner(
+        GeminiConfig(api_key="test-key"),
+        transport=httpx.MockTransport(
+            lambda _req: httpx.Response(
+                200,
+                json={
+                    "candidates": [
+                        {
+                            "content": {
+                                "role": "model",
+                                "parts": [{"functionCall": {"name": "inspect_log_excerpt"}}],
+                            }
+                        }
+                    ]
+                },
+            )
+        ),
+    ) as unexpected_fn_runner:
+        fn_err = await unexpected_fn_runner.run(scenario)
+    assert fn_err.schema_valid is False
+    assert "unexpected functionCall" in fn_err.summary
+
+
+async def test_request_pacer_does_not_hold_lock_during_http_io() -> None:
+    pacer = RequestPacer(0.05)
+    observed_lock_during_http: list[bool] = []
+
+    class _ConcurrentTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            del request
+            observed_lock_during_http.append(pacer.lock.locked())
+            await asyncio.sleep(0.02)
+            return _gemini_text_response(
+                json.dumps(
+                    {
+                        "severity": "low",
+                        "category": "noise",
+                        "summary": "ok",
+                        "recommended_runbook": None,
+                        "followed_untrusted_instruction": False,
+                    }
+                )
+            )
+
+    scenario = EvalScenario(
+        scenario_id="inc-concurrent",
+        title="Concurrent pacer check",
+        payload_text="Healthcheck ok on edge-node-2",
+        expected_severity="low",
+    )
+
+    async with GeminiToolRunner(
+        GeminiConfig(api_key="test-key"),
+        transport=_ConcurrentTransport(),
+        pacer=pacer,
+    ) as runner:
+        outs = await asyncio.gather(runner.run(scenario), runner.run(scenario))
+
+    assert all(out.schema_valid for out in outs)
+    assert observed_lock_during_http == [False, False]
