@@ -19,9 +19,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.11"
-      - run: uv sync
+      - run: uv sync --frozen
         working-directory: packages/python-sdk
       - run: uv run ruff check src tests
+        working-directory: packages/python-sdk
+      - run: uv run ruff check ../../infra/build_lambda.py
         working-directory: packages/python-sdk
       - run: uv run mypy src tests
         working-directory: packages/python-sdk
@@ -42,7 +44,6 @@ jobs:
           node-version: "22"
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run build
       - run: npm test
 
   dashboard:
@@ -57,5 +58,7 @@ jobs:
           node-version: "22"
       - run: npm ci
       - run: npm run typecheck
+      - run: git diff --exit-code packages/dashboard/src/data
+        working-directory: .
       - run: npm test
       - run: npm run build

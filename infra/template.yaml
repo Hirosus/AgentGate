@@ -1,13 +1,25 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: AgentGate serverless webhook intake, DynamoDB idempotency store, and S3 eval artifacts
+Description: AgentGate serverless webhook intake and DynamoDB idempotency store
 
 Parameters:
   WebhookSecret:
     Type: String
     NoEcho: true
-    MinLength: 16
+    MinLength: 32
     Description: Shared HMAC-SHA256 secret for AgentGate webhook verification
+  IdempotencyTtlSeconds:
+    Type: Number
+    Default: 86400
+    MinValue: 60
+    Description: TTL in seconds for stored DynamoDB webhook idempotency records
+  TriageMode:
+    Type: String
+    Default: none
+    AllowedValues:
+      - none
+      - deterministic
+    Description: Optional inline webhook triage mode (none or deterministic)
 
 Globals:
   Function:
@@ -30,15 +42,6 @@ Resources:
         AttributeName: expires_at
         Enabled: true
 
-  EvalReportsBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-
   WebhookIntakeFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -47,17 +50,21 @@ Resources:
       Architectures:
         - x86_64
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref IdempotencyTable
-        - S3WritePolicy:
-            BucketName: !Ref EvalReportsBucket
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt IdempotencyTable.Arn
       Environment:
         Variables:
           AGENTGATE_WEBHOOK_SECRET: !Ref WebhookSecret
           AGENTGATE_STORE_BACKEND: dynamodb
           AGENTGATE_WEBHOOK_MAX_AGE_SECONDS: "300"
+          AGENTGATE_IDEMPOTENCY_TTL_SECONDS: !Ref IdempotencyTtlSeconds
+          AGENTGATE_TRIAGE_MODE: !Ref TriageMode
           IDEMPOTENCY_TABLE: !Ref IdempotencyTable
-          REPORTS_BUCKET: !Ref EvalReportsBucket
       Events:
         HealthCheck:
           Type: HttpApi

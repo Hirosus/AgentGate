@@ -18,9 +18,14 @@ packages/mcp-server/dist-test/
 # Secrets & local runtime state
 .env
 .env.local
+.env.*.local
 /data/
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 
 # AWS SAM / Cloud
 .aws-sam/
@@ -29,6 +34,7 @@ infra/build/
 
 # Next.js dashboard
 .next/
+.vercel/
 out/
 next-env.d.ts
 packages/dashboard/dist-test/

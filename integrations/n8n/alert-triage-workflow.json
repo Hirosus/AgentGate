@@ -58,8 +58,8 @@
         "type": "SHA256",
         "encoding": "hex",
         "dataPropertyName": "signature",
-        "secret": "={{ $env.AGENTGATE_WEBHOOK_SECRET }}",
-        "value": "={{ $json.timestamp + '.' + $json.rawBody }}"
+        "secret": "={{ $env?.AGENTGATE_WEBHOOK_SECRET || $vars?.AGENTGATE_WEBHOOK_SECRET || '' }}",
+        "value": "={{ $json.timestamp + '.' + $json.idempotencyKey + '.' + $json.rawBody }}"
       }
     },
     {
@@ -70,14 +70,10 @@
       "position": [960, 300],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.AGENTGATE_BASE_URL + '/webhooks/triage' }}",
+        "url": "={{ ($env?.AGENTGATE_BASE_URL || $vars?.AGENTGATE_BASE_URL || 'http://127.0.0.1:8000').replace(/\\/+$/, '') + '/webhooks/triage' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
             {
               "name": "X-AgentGate-Source",
               "value": "n8n"
@@ -92,7 +88,7 @@
             },
             {
               "name": "X-AgentGate-Signature",
-              "value": "={{ 'v1=' + $json.signature }}"
+              "value": "={{ 'v2=' + $json.signature }}"
             }
           ]
         },
@@ -117,7 +113,5 @@
       "main": [[{ "node": "POST to AgentGate Ingress", "type": "main", "index": 0 }]]
     }
   },
-  "settings": {
-    "errorWorkflow": "agentgate-error-handler"
-  }
+  "settings": {}
 }
