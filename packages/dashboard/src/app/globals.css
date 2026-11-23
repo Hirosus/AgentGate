@@ -18,21 +18,22 @@
   --faint: #989aa0;
   --primary: #ffffff;
   --primary-ink: #131217;
-  --accent: #63a1eb;
-  --accent-strong: #7bb4f7;
-  --accent-hover: #7bb4f7;
-  --accent-soft: rgba(99, 161, 235, 0.14);
+  /* Whisper-quiet semantic surface borders & APCA >= 4.5:1 contrast accents */
+  --accent: #72aef5;
+  --accent-strong: #8fc1fa;
+  --accent-hover: #8fc1fa;
+  --accent-soft: rgba(114, 174, 245, 0.14);
   --positive: #5fc39c;
-  --negative: #e5566f;
-  --danger: #e5566f;
-  --warning: #d9a441;
-  --phase-cyan: #22d3ee;
-  --phase-violet: #38bdf8;
-  --border-emerald: #1f332c;
-  --border-cyan: #1c3138;
-  --border-amber: #332b1c;
-  --border-rose: #362026;
-  --chart-1: #63a1eb;
+  --negative: #f06a80;
+  --danger: #f06a80;
+  --warning: #e0af4b;
+  --phase-cyan: #2fd6ef;
+  --phase-violet: #4ec3fb;
+  --border-emerald: #1c2824;
+  --border-cyan: #19262b;
+  --border-amber: #29241a;
+  --border-rose: #2c1c20;
+  --chart-1: #72aef5;
   --chart-2: #e5566f;
   --chart-3: #d9a441;
   --grid: #2b2b2b;
@@ -64,21 +65,21 @@
   --faint: #66686a;
   --primary: #131416;
   --primary-ink: #ffffff;
-  --accent: #1b6c80;
-  --accent-strong: #155666;
-  --accent-hover: #155666;
-  --accent-soft: rgba(27, 108, 128, 0.08);
-  --positive: #1e7b4f;
-  --negative: #c4242a;
-  --danger: #c4242a;
-  --warning: #92400e;
-  --phase-cyan: #0891b2;
-  --phase-violet: #0284c7;
-  --border-emerald: #d7ebe0;
-  --border-cyan: #d5e8ed;
-  --border-amber: #ece2cf;
-  --border-rose: #efd9db;
-  --chart-1: #1b6c80;
+  --accent: #145e70;
+  --accent-strong: #0e4857;
+  --accent-hover: #0e4857;
+  --accent-soft: rgba(20, 94, 112, 0.08);
+  --positive: #196b45;
+  --negative: #b82127;
+  --danger: #b82127;
+  --warning: #8a3d0b;
+  --phase-cyan: #0b7a96;
+  --phase-violet: #0369a1;
+  --border-emerald: #dceee4;
+  --border-cyan: #d9eaf0;
+  --border-amber: #efe7d7;
+  --border-rose: #f2dfe1;
+  --chart-1: #145e70;
   --chart-2: #2f70bb;
   --chart-3: #a86f0c;
   --grid: #e5e5e5;
@@ -133,8 +134,24 @@ pre,
   animation: stage-enter 140ms ease-out both;
 }
 
+@keyframes drawer-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.drawer-enter {
+  animation: drawer-slide-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .stage-reveal {
+  .stage-reveal,
+  .drawer-enter {
     animation: none;
   }
 }
