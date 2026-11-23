@@ -13,8 +13,11 @@ import {
 } from "../src/lib/evalData";
 import { TRIAGE_PRESETS } from "../src/lib/triageCatalog";
 import {
+  WEBHOOK_LIBRARY_ITEMS,
+  WEBHOOK_PROVIDERS,
   buildPresetInitialPreview,
   buildTriagePreview,
+  computeTimingPhaseWaterfall,
   formatPythonSdkSnippet,
   formatSignedCurlCommand,
   getServiceSlaInfo,
@@ -297,5 +300,15 @@ describe("evalData parsing, metrics, and validation", () => {
     const py = formatPythonSdkSnippet(initial, "checkout-api", 820, "Alert latency 820ms");
     assert.ok(py.includes("AgentGateClient"));
     assert.ok(py.includes("send_signed_webhook"));
+
+    assert.equal(WEBHOOK_PROVIDERS.length, 6);
+    assert.equal(WEBHOOK_LIBRARY_ITEMS.length, 8);
+    const phases = computeTimingPhaseWaterfall(initial);
+    assert.equal(phases.length, 5);
+    assert.equal(phases[0]?.codeLabel, "REPLAY_WINDOW");
+    assert.equal(phases[3]?.codeLabel, "MCP_STDIO_TOOLS");
+    const tamperedPhases = computeTimingPhaseWaterfall(tampered);
+    assert.equal(tamperedPhases[1]?.status, "failed");
+    assert.equal(tamperedPhases[1]?.colorVar, "var(--danger)");
   });
 });

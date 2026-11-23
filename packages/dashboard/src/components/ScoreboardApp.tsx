@@ -494,7 +494,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                 <div className="text-[14px] font-semibold tracking-tight text-[var(--text)]">
                   AgentGate
                 </div>
-                <div className="text-[12px] text-[var(--muted)]">prod-eu-west · v2 HMAC</div>
+                <div className="text-[13px] text-[var(--muted)]">prod-eu-west · v2 HMAC</div>
               </div>
             </button>
             {isDrawer && (
@@ -509,7 +509,9 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
           </div>
 
           <nav aria-label={isDrawer ? "Mobile sidebar navigation" : "Sidebar navigation"}>
-            <div className="mb-1.5 px-2 text-[13px] text-[var(--muted)]">Workspace</div>
+            <div className="mb-1.5 px-2 text-[13px] font-medium text-[var(--muted)]">
+              Workspace
+            </div>
             <ul className="space-y-1">
               {sidebarItems.map((item) => {
                 const active = activeView === item.key;
@@ -522,13 +524,57 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                         setActiveView(item.key);
                         setMobileNavOpen(false);
                       }}
-                      className={`flex h-9 w-full items-center justify-between rounded-[6px] border-l-2 px-2.5 text-[14px] transition-colors ${
+                      className={`flex h-9 w-full items-center justify-between rounded-[6px] border-l-2 px-2.5 text-[13px] ${
                         active
-                          ? "border-[var(--accent)] bg-[var(--active)] font-medium text-[var(--text)]"
+                          ? "border-[var(--accent)] bg-[var(--active)] font-semibold text-[var(--text)]"
                           : "border-transparent text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--text)]"
                       }`}
                     >
-                      <span>{item.label}</span>
+                      <span className="flex items-center gap-2">
+                        {item.key === "triage" && (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden="true"
+                          >
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                          </svg>
+                        )}
+                        {item.key === "benchmarks" && (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden="true"
+                          >
+                            <rect x="3" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="14" width="7" height="7" rx="1" />
+                            <rect x="3" y="14" width="7" height="7" rx="1" />
+                          </svg>
+                        )}
+                        {item.key === "security" && (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden="true"
+                          >
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                          </svg>
+                        )}
+                        <span>{item.label}</span>
+                      </span>
                       <span className="num text-[13px] text-[var(--muted)]">{item.count}</span>
                     </button>
                   </li>
@@ -537,47 +583,83 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
             </ul>
           </nav>
 
+          {/* Reference 2 OpenStatus Monitors (4) with Live Status Dots */}
           <div>
-            <div className="mb-1.5 px-2 text-[13px] text-[var(--muted)]">Incident queue</div>
+            <div className="mb-1.5 flex items-center justify-between px-2 text-[13px] font-medium text-[var(--muted)]">
+              <span>Monitors ({TRIAGE_PRESETS.length})</span>
+              <span className="text-[13px]">SLO Status</span>
+            </div>
             <ul className="space-y-1">
-              {TRIAGE_PRESETS.map((preset) => (
-                <li key={preset.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadPreset(preset.id)}
-                    className="flex w-full items-center justify-between rounded-[6px] px-2.5 py-1.5 text-left text-[13px] text-[var(--muted)] transition-colors hover:bg-[var(--raised)] hover:text-[var(--text)]"
-                  >
-                    <code className="truncate font-medium text-[var(--text)]">{preset.service}</code>
-                    <span className="num shrink-0 text-[12px] text-[var(--muted)]">
-                      {preset.p95Ms !== null ? `${preset.p95Ms} ms` : "bait"}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {TRIAGE_PRESETS.map((preset) => {
+                const dotColor =
+                  preset.id === "preset-db-pool" || preset.id === "preset-tls-expiry"
+                    ? "var(--negative)"
+                    : preset.id === "preset-prompt-injection"
+                      ? "var(--warning)"
+                      : "var(--positive)";
+                return (
+                  <li key={preset.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadPreset(preset.id)}
+                      className="flex w-full items-center justify-between gap-1.5 rounded-[6px] px-1.5 py-1.5 text-left text-[13px] text-[var(--muted)] hover:bg-[var(--raised)] hover:text-[var(--text)]"
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: dotColor }}
+                        />
+                        <span className="truncate font-medium text-[var(--text)]">
+                          {preset.service}
+                        </span>
+                      </span>
+                      <span className="num shrink-0 text-[13px] text-[var(--muted)]">
+                        {preset.p95Ms !== null ? `${preset.p95Ms}ms` : "bait"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
 
-        <div className="space-y-2 border-t border-[var(--border)] pt-3 text-[13px]">
-          <div className="flex items-center justify-between text-[var(--muted)]">
-            <span>MCP catalog</span>
-            <span className="num text-[var(--text)]">3 read-only tools</span>
+        {/* Reference 3 Hookdeck Inspect Bottom Event Gateway Mini-Topology Card */}
+        <div
+          className="space-y-2.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] p-3 text-[13px]"
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-[var(--text)]">Event Gateway</span>
+            <span className="rounded-[3px] bg-[var(--pill-positive-bg)] px-1.5 py-0.5 text-[13px] font-medium text-[var(--pill-positive-ink)]">
+              v2 HMAC
+            </span>
           </div>
-          <div className="flex items-center justify-between text-[var(--muted)]">
-            <span>Ledger keys</span>
-            <span className="num text-[var(--text)]">{liveStatus.claimedKeyCount} claimed</span>
+          <div className="code-id flex items-center justify-between rounded-[6px] border border-[var(--border)] bg-[var(--ground)] px-2.5 py-2 text-[13px] text-[var(--muted)]">
+            <span className="text-[var(--text)]">6 Sources</span>
+            <span>&rarr;</span>
+            <span className="font-semibold text-[var(--accent)]">Gate</span>
+            <span>&rarr;</span>
+            <span className="text-[var(--positive)]">3 MCP</span>
           </div>
-          {report && (
+          <div className="space-y-1 pt-0.5 text-[13px]">
             <div className="flex items-center justify-between text-[var(--muted)]">
-              <span>CI quality gate</span>
-              <span
-                className="font-medium"
-                style={{ color: gatePassed ? "var(--positive)" : "var(--negative)" }}
-              >
-                {gatePassed ? "Pass" : "Fail"} ({formatPercent(report.tool_pass_rate)})
+              <span>Ledger keys</span>
+              <span className="num text-[var(--text)]">
+                {liveStatus.claimedKeyCount} claimed
               </span>
             </div>
-          )}
+            {report && (
+              <div className="flex items-center justify-between text-[var(--muted)]">
+                <span>CI quality gate</span>
+                <span
+                  className="font-medium"
+                  style={{ color: gatePassed ? "var(--positive)" : "var(--negative)" }}
+                >
+                  {gatePassed ? "Pass" : "Fail"} ({formatPercent(report.tool_pass_rate)})
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -631,10 +713,10 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
             onClick={() => setPaletteOpen(true)}
             aria-keyshortcuts="Meta+k Control+k"
             aria-label="Open command palette"
-            className="hidden h-8 min-w-0 flex-1 max-w-[380px] items-center justify-between rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[13px] text-[var(--muted)] transition-colors hover:border-[var(--control)] hover:text-[var(--text)] md:inline-flex"
+            className="hidden h-8 min-w-0 flex-1 max-w-[380px] items-center justify-between rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[13px] text-[var(--muted)] hover:border-[var(--control)] hover:text-[var(--text)] md:inline-flex"
           >
             <span className="truncate">Jump to incident, runbook, or eval...</span>
-            <kbd className="ml-2 shrink-0 rounded-[4px] border border-[var(--border-strong)] bg-[var(--raised)] px-1.5 py-0.5 text-[12px] text-[var(--text)]">
+            <kbd className="ml-2 shrink-0 rounded-[4px] border border-[var(--border-strong)] bg-[var(--raised)] px-1.5 py-0.5 text-[13px] text-[var(--text)]">
               ⌘K
             </kbd>
           </button>
@@ -648,7 +730,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
               ⌘K
             </button>
             <span
-              className="hidden h-8 items-center rounded-[4px] px-2.5 text-[12px] font-medium sm:inline-flex"
+              className="hidden h-8 items-center rounded-[4px] px-2.5 text-[13px] font-medium sm:inline-flex"
               style={{
                 backgroundColor: liveStatus.liveAiConfigured
                   ? "var(--pill-positive-bg)"
@@ -664,7 +746,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
               type="button"
               onClick={handleToggleTheme}
               aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-              className="inline-flex h-8 items-center rounded-[6px] border border-[var(--control)] bg-[var(--surface)] px-3 text-[13px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--raised)]"
+              className="inline-flex h-8 items-center rounded-[6px] border border-[var(--control)] bg-[var(--surface)] px-3 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--raised)]"
             >
               {theme === "dark" ? "Light mode" : "Dark mode"}
             </button>
@@ -752,7 +834,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="h-8 rounded-[6px] border border-[var(--control)] bg-[var(--surface)] px-3 text-[13px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--raised)]"
+                          className="h-8 rounded-[6px] border border-[var(--control)] bg-[var(--surface)] px-3 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--raised)]"
                         >
                           Import JSON
                         </button>
@@ -773,70 +855,114 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                       </div>
                     )}
 
-                    {/* 1px-Divided 5-Cell KPI Strip */}
+                    {/* Reference 2 OpenStatus Semantic-Bordered 5-Card Status Strip */}
                     <section
                       aria-label="Evaluation benchmark metrics"
-                      className="grid grid-cols-2 divide-y divide-[var(--border)] rounded-[6px] border border-[var(--border)] bg-[var(--surface)] lg:grid-cols-5 lg:divide-x lg:divide-y-0"
+                      className="grid grid-cols-2 gap-3 lg:grid-cols-5"
                     >
-                      <div className="p-4">
-                        <div className="text-[13px] text-[var(--muted)]">MCP pass rate</div>
-                        <div className="num mt-1 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
+                      <div
+                        style={{ borderColor: "var(--border-emerald)" }}
+                        className="rounded-[8px] border bg-[var(--surface)] p-4"
+                      >
+                        <div className="flex items-center justify-between text-[13px] text-[var(--muted)]">
+                          <span>MCP pass rate</span>
+                          <span className="h-2 w-2 rounded-full bg-[var(--positive)]" />
+                        </div>
+                        <div className="num mt-1.5 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
                           {formatPercent(report.tool_pass_rate)}
                         </div>
-                        <div className="num mt-0.5 text-[12px]" style={{ color: passDeltaColor }}>
+                        <div className="num mt-0.5 text-[13px]" style={{ color: passDeltaColor }}>
                           {formatSignedPp(passDelta)} vs {formatPercent(report.baseline_pass_rate)}
                         </div>
                       </div>
 
-                      <div className="p-4">
-                        <div className="text-[13px] text-[var(--muted)]">
-                          {summary.p95ToolNetMs !== null ? "Net p95 latency" : "Tool p95 latency"}
+                      <div
+                        style={{ borderColor: "var(--border-cyan)" }}
+                        className="rounded-[8px] border bg-[var(--surface)] p-4"
+                      >
+                        <div className="flex items-center justify-between text-[13px] text-[var(--muted)]">
+                          <span>
+                            {summary.p95ToolNetMs !== null ? "Net p95 latency" : "Tool p95 latency"}
+                          </span>
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: "var(--phase-cyan)" }}
+                          />
                         </div>
-                        <div className="num mt-1 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
+                        <div className="num mt-1.5 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
                           {formatMs(
                             summary.p95ToolNetMs !== null
                               ? summary.p95ToolNetMs
                               : report.p95_tool_latency_ms,
                           )}
                         </div>
-                        <div className="num mt-0.5 text-[12px] text-[var(--muted)]">
+                        <div className="num mt-0.5 text-[13px] text-[var(--muted)]">
                           {summary.p95BaselineNetMs !== null
                             ? `vs ${formatMs(summary.p95BaselineNetMs)} base net`
                             : `Wall p95 ${formatMs(report.p95_tool_latency_ms)}`}
                         </div>
                       </div>
 
-                      <div className="p-4">
-                        <div className="text-[13px] text-[var(--muted)]">Schema validity</div>
-                        <div className="num mt-1 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
+                      <div
+                        style={{ borderColor: "var(--border-emerald)" }}
+                        className="rounded-[8px] border bg-[var(--surface)] p-4"
+                      >
+                        <div className="flex items-center justify-between text-[13px] text-[var(--muted)]">
+                          <span>Schema validity</span>
+                          <span className="h-2 w-2 rounded-full bg-[var(--positive)]" />
+                        </div>
+                        <div className="num mt-1.5 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
                           {formatPercent(report.schema_valid_rate)}
                         </div>
-                        <div className="num mt-0.5 text-[12px] text-[var(--muted)]">
+                        <div className="num mt-0.5 text-[13px] text-[var(--muted)]">
                           {summary.schemaValidCount} of {summary.totalCases} valid
                         </div>
                       </div>
 
-                      <div className="p-4">
-                        <div className="text-[13px] text-[var(--muted)]">Injection defense</div>
-                        <div className="num mt-1 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
+                      <div
+                        style={{ borderColor: "var(--border-amber)" }}
+                        className="rounded-[8px] border bg-[var(--surface)] p-4"
+                      >
+                        <div className="flex items-center justify-between text-[13px] text-[var(--muted)]">
+                          <span>Injection defense</span>
+                          <span className="h-2 w-2 rounded-full bg-[var(--warning)]" />
+                        </div>
+                        <div className="num mt-1.5 text-[20px] font-semibold tracking-tight text-[var(--text)] sm:text-[24px]">
                           {formatPercent(report.injection_block_rate)}
                         </div>
-                        <div className="num mt-0.5 text-[12px] text-[var(--muted)]">
+                        <div className="num mt-0.5 text-[13px] text-[var(--muted)]">
                           {summary.adversarialTotal > 0
                             ? `${summary.adversarialBlocked} of ${summary.adversarialTotal} blocked`
                             : `${injectionFailedRows.length} exposed`}
                         </div>
                       </div>
 
-                      <div className="col-span-2 p-4 lg:col-span-1">
-                        <div className="text-[13px] text-[var(--muted)]">CI quality gate</div>
+                      <div
+                        style={{
+                          borderColor: gatePassed
+                            ? "var(--border-emerald)"
+                            : "var(--border-rose)",
+                        }}
+                        className="col-span-2 rounded-[8px] border bg-[var(--surface)] p-4 lg:col-span-1"
+                      >
+                        <div className="flex items-center justify-between text-[13px] text-[var(--muted)]">
+                          <span>CI quality gate</span>
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{
+                              backgroundColor: gatePassed
+                                ? "var(--positive)"
+                                : "var(--negative)",
+                            }}
+                          />
+                        </div>
                         <div
-                          className="mt-1 text-[20px] font-semibold tracking-tight sm:text-[24px]"
+                          className="mt-1.5 text-[20px] font-semibold tracking-tight sm:text-[24px]"
                           style={{ color: gatePassed ? "var(--positive)" : "var(--negative)" }}
                         >
                           {gatePassed ? "Pass" : "Blocked"}
                         </div>
-                        <div className="num mt-0.5 text-[12px] text-[var(--muted)]">
+                        <div className="num mt-0.5 text-[13px] text-[var(--muted)]">
                           {gateChecks.filter((c) => c.passed).length} of {gateChecks.length} checks
                         </div>
                       </div>
@@ -868,7 +994,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                               </p>
                             </div>
                             <span
-                              className="rounded-[4px] px-2 py-0.5 text-[12px] font-medium"
+                              className="rounded-[4px] px-2 py-0.5 text-[13px] font-medium"
                               style={{
                                 backgroundColor: gatePassed
                                   ? "var(--pill-positive-bg)"
@@ -892,7 +1018,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                   <div className="font-medium text-[var(--text)]">
                                     {check.label}
                                   </div>
-                                  <div className="num text-[12px] text-[var(--muted)]">
+                                  <div className="num text-[13px] text-[var(--muted)]">
                                     Floor {check.target}
                                   </div>
                                 </div>
@@ -901,7 +1027,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                     {check.measured}
                                   </div>
                                   <div
-                                    className="text-[12px] font-medium"
+                                    className="text-[13px] font-medium"
                                     style={{
                                       color: check.passed
                                         ? "var(--positive)"
@@ -964,7 +1090,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
 
                           {report.gate_failures.length > 0 && (
                             <div
-                              className="mt-2 rounded-[4px] px-2.5 py-2 text-[11px]"
+                              className="mt-2 rounded-[4px] px-2.5 py-2 text-[13px]"
                               style={{
                                 backgroundColor: "var(--pill-negative-bg)",
                                 color: "var(--pill-negative-ink)",
@@ -1055,7 +1181,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                       <div className="mt-3 overflow-x-auto">
                         <table className="w-full border-collapse text-left text-[13px]">
                           <thead>
-                            <tr className="border-b border-[var(--border)] text-[12px] text-[var(--muted)]">
+                            <tr className="border-b border-[var(--border)] text-[13px] text-[var(--muted)]">
                               <th className="py-2.5 pr-3 font-medium">Scenario</th>
                               <th className="py-2.5 pr-3 font-medium">Outcome</th>
                               <th className="py-2.5 pr-3 font-medium">Runbook</th>
@@ -1101,7 +1227,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                         aria-expanded={isSelected}
                                         className="flex items-center gap-2 text-left"
                                       >
-                                        <code className="text-[12px] font-medium text-[var(--accent)]">
+                                        <code className="text-[13px] font-medium text-[var(--accent)]">
                                           {row.scenario_id}
                                         </code>
                                         <span className="font-medium text-[var(--text)]">
@@ -1111,7 +1237,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                     </td>
                                     <td className="py-2.5 pr-3">
                                       <span
-                                        className="inline-flex rounded-[4px] px-2 py-0.5 text-[11px] font-medium"
+                                        className="inline-flex rounded-[4px] px-2 py-0.5 text-[13px] font-medium"
                                         style={{
                                           backgroundColor: row.tool_passed
                                             ? "var(--pill-positive-bg)"
@@ -1126,7 +1252,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                     </td>
                                     <td className="py-2.5 pr-3">
                                       {row.expected_runbook ? (
-                                        <code className="text-[12px] text-[var(--text)]">
+                                        <code className="text-[13px] text-[var(--text)]">
                                           {row.expected_runbook}
                                         </code>
                                       ) : (
@@ -1152,7 +1278,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                           e.stopPropagation();
                                           handleLoadScenarioInWorkbench(row);
                                         }}
-                                        className="rounded-[4px] border border-[var(--control)] bg-[var(--raised)] px-2 py-1 text-[11px] font-medium text-[var(--text)] hover:bg-[var(--active)]"
+                                        className="rounded-[4px] border border-[var(--control)] bg-[var(--raised)] px-2 py-1 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--active)]"
                                       >
                                         Test
                                       </button>
@@ -1192,7 +1318,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                       <h2 className="text-[16px] font-semibold text-[var(--text)]">
                         Verified MCP runbook coverage
                       </h2>
-                      <span className="num text-[12px] text-[var(--muted)]">
+                      <span className="num text-[13px] text-[var(--muted)]">
                         {runbookCards.length} runbooks
                       </span>
                     </div>
@@ -1213,10 +1339,10 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
-                                <code className="text-[12px] font-semibold text-[var(--accent)]">
+                                <code className="text-[13px] font-semibold text-[var(--accent)]">
                                   {item.runbookId}
                                 </code>
-                                <code className="rounded-[4px] bg-[var(--raised)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]">
+                                <code className="rounded-[4px] bg-[var(--raised)] px-1.5 py-0.5 text-[13px] text-[var(--muted)]">
                                   {item.symptomTag}
                                 </code>
                               </div>
@@ -1236,7 +1362,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                     }}
                                   />
                                 </div>
-                                <span className="num text-[11px] text-[var(--muted)]">
+                                <span className="num text-[13px] text-[var(--muted)]">
                                   {stats
                                     ? `${stats.toolPassed}/${stats.total} passed · ${formatMs(stats.avgToolMs)}`
                                     : "0 scenarios matched"}
@@ -1248,7 +1374,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                               <button
                                 type="button"
                                 onClick={() => setActiveRunbookId(item.runbookId)}
-                                className="h-7 rounded-[4px] border border-[var(--control)] bg-[var(--surface)] px-2.5 text-[11px] font-medium text-[var(--text)] hover:bg-[var(--raised)]"
+                                className="h-7 rounded-[4px] border border-[var(--control)] bg-[var(--surface)] px-2.5 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--raised)]"
                               >
                                 Inspect
                               </button>
@@ -1257,7 +1383,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                 onClick={() =>
                                   handleLoadRunbookInWorkbench(targetService, item.symptomTag)
                                 }
-                                className="h-7 rounded-[4px] border border-[var(--border)] bg-[var(--raised)] px-2.5 text-[11px] font-medium text-[var(--text)] hover:bg-[var(--active)]"
+                                className="h-7 rounded-[4px] border border-[var(--border)] bg-[var(--raised)] px-2.5 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--active)]"
                               >
                                 Test
                               </button>
@@ -1276,7 +1402,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                           Prompt-injection security probes
                         </h2>
                         <span
-                          className="num rounded-[4px] px-2 py-0.5 text-[11px] font-medium"
+                          className="num rounded-[4px] px-2 py-0.5 text-[13px] font-medium"
                           style={{
                             backgroundColor:
                               report && report.injection_block_rate >= 1
@@ -1307,14 +1433,14 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                             >
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <code className="shrink-0 whitespace-nowrap text-[12px] font-medium text-[var(--accent)]">
+                                  <code className="shrink-0 whitespace-nowrap text-[13px] font-medium text-[var(--accent)]">
                                     {row.scenario_id}
                                   </code>
                                   <span className="min-w-0 truncate text-[13px] font-medium text-[var(--text)]">
                                     {row.title}
                                   </span>
                                 </div>
-                                <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                                <div className="mt-0.5 text-[13px] text-[var(--muted)]">
                                   Expected {row.expected_severity ?? "-"}{" "}
                                   {row.expected_runbook ?? "null"} · MCP{" "}
                                   {row.tool_severity ?? "-"} {row.tool_runbook ?? "null"}
@@ -1322,7 +1448,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                               </div>
                               <div className="flex shrink-0 items-center gap-2">
                                 <span
-                                  className="rounded-[4px] px-2 py-0.5 text-[12px] font-medium"
+                                  className="rounded-[4px] px-2 py-0.5 text-[13px] font-medium"
                                   style={{
                                     backgroundColor: row.injection_blocked
                                       ? "var(--pill-positive-bg)"
@@ -1337,7 +1463,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                                 <button
                                   type="button"
                                   onClick={() => handleLoadScenarioInWorkbench(row)}
-                                  className="h-7 rounded-[4px] border border-[var(--border)] bg-[var(--raised)] px-2.5 text-[12px] font-medium text-[var(--text)] hover:bg-[var(--active)]"
+                                  className="h-7 rounded-[4px] border border-[var(--border)] bg-[var(--raised)] px-2.5 text-[13px] font-medium text-[var(--text)] hover:bg-[var(--active)]"
                                 >
                                   Test
                                 </button>
@@ -1353,7 +1479,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                         <h2 className="text-[16px] font-semibold text-[var(--text)]">
                           Service SLA p95 budgets
                         </h2>
-                        <span className="num text-[12px] text-[var(--muted)]">
+                        <span className="num text-[13px] text-[var(--muted)]">
                           Unlisted fallback {formatMs(catalog.defaultBudgetMs)}
                         </span>
                       </div>
@@ -1361,7 +1487,7 @@ export function ScoreboardApp({ datasets, scenarios, catalog }: ScoreboardAppPro
                         {serviceBudgets.map(([svc, budgetMs]) => (
                           <div
                             key={svc}
-                            className="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--border)] bg-[var(--raised)] px-3 py-2 text-[12px]"
+                            className="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--border)] bg-[var(--raised)] px-3 py-2 text-[13px]"
                           >
                             <code className="min-w-0 truncate text-[var(--text)]">{svc}</code>
                             <span className="num shrink-0 whitespace-nowrap font-medium text-[var(--muted)]">
