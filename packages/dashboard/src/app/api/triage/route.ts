@@ -261,7 +261,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         id: "hmac",
         label: stageLabelHmac,
         status: "failed",
-        detail: "timingSafeEqual mismatch — wire body or key binding did not match v2 signature.",
+        detail: "timingSafeEqual mismatch: wire body or key binding did not match v2 signature.",
         durationMs: hmacMs,
       },
       {
@@ -379,7 +379,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return res;
   }
 
-  // Stage 4 & 5: Authenticated unique webhook — execute baseline vs. MCP triage.
+  // Stage 4 & 5: Authenticated unique webhook; execute baseline vs. MCP triage.
   const baselineOutput = runBaselineHeuristic(payloadText);
   const tAgentStart = performance.now();
   let executionResult;
@@ -391,7 +391,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         ...det,
         fallbackUsed: true,
         fallbackReason:
-          "Live AI secret is not configured in this environment — ran deterministic MCP engine.",
+          "Live AI secret is not configured in this environment; ran deterministic MCP engine.",
       };
     } else {
       const headerStore = await headers();
@@ -402,7 +402,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         executionResult = {
           ...det,
           fallbackUsed: true,
-          fallbackReason: `Live AI quota guard (5 req/min/IP) active for ${rateLimit.retryAfterSeconds}s — fell back to deterministic MCP.`,
+          fallbackReason: `Live AI quota guard (5 req/min/IP) active for ${rateLimit.retryAfterSeconds}s; fell back to deterministic MCP.`,
         };
       } else {
         executionResult = await runGeminiMcpTriage(payloadText, liveApiKey, service, p95Ms);

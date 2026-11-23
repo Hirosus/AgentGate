@@ -15,6 +15,7 @@ interface RunbookDrawerProps {
   readonly activeDatasetLabel: string;
   readonly onClose: () => void;
   readonly onSelectScenario: (scenarioId: string) => void;
+  readonly onTestRunbookInWorkbench?: (service: string, symptomTag: string) => void;
 }
 
 const PRIMARY_SERVICES_BY_SYMPTOM: Readonly<Record<string, readonly string[]>> = {
@@ -60,6 +61,7 @@ export function RunbookDrawer({
   activeDatasetLabel,
   onClose,
   onSelectScenario,
+  onTestRunbookInWorkbench,
 }: RunbookDrawerProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -127,7 +129,7 @@ export function RunbookDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/55 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex justify-end bg-black/60"
       onClick={dismissDrawer}
     >
       <div
@@ -135,7 +137,7 @@ export function RunbookDrawer({
         aria-modal="true"
         aria-labelledby="runbook-drawer-title"
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[var(--border-strong)] bg-[var(--surface)] p-6 shadow-2xl"
+        className="flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[var(--border-strong)] bg-[var(--surface)] p-6"
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--rule)] pb-4">
           <div className="min-w-0">
@@ -166,37 +168,54 @@ export function RunbookDrawer({
             </h2>
           </div>
 
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={dismissDrawer}
-            className="h-8 shrink-0 rounded-[6px] border border-[var(--control)] bg-[var(--raised)] px-3 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--active)]"
-          >
-            Close
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {resolved && onTestRunbookInWorkbench && resolved.primaryServices[0] && (
+              <button
+                type="button"
+                onClick={() => {
+                  restoreFocusOnCloseRef.current = false;
+                  onTestRunbookInWorkbench(
+                    resolved.primaryServices[0] ?? "checkout-api",
+                    resolved.symptomTag,
+                  );
+                }}
+                className="h-8 rounded-[6px] bg-[var(--primary)] px-3 text-[12px] font-medium text-[var(--primary-ink)] transition-opacity hover:opacity-90"
+              >
+                Load in workbench
+              </button>
+            )}
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={dismissDrawer}
+              className="h-8 rounded-[6px] border border-[var(--control)] bg-[var(--surface)] px-3 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--raised)]"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 space-y-6">
           {resolved ? (
             <>
               <section aria-label="Symptom disambiguation">
-                <h3 className="text-[12px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                <h3 className="text-[12px] font-medium text-[var(--muted)]">
                   Symptom disambiguation
                 </h3>
-                <p className="mt-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--raised)] p-3.5 text-[13px] leading-relaxed text-[var(--text)]">
+                <p className="mt-1.5 rounded-[6px] border border-[var(--border)] bg-[var(--raised)] p-3.5 text-[13px] leading-relaxed text-[var(--text)]">
                   {resolved.description || "Canonical diagnostic runbook in MCP catalog."}
                 </p>
               </section>
 
               <section aria-label="Ordered diagnostic checks">
-                <h3 className="text-[12px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                <h3 className="text-[12px] font-medium text-[var(--muted)]">
                   Ordered remediation checks ({resolved.entry.checks.length})
                 </h3>
                 <ol className="mt-2 space-y-2">
                   {resolved.entry.checks.map((check, index) => (
                     <li
                       key={check}
-                      className="flex items-start gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--raised)] p-3 text-[13px] text-[var(--text)]"
+                      className="flex items-start gap-3 rounded-[6px] border border-[var(--border)] bg-[var(--raised)] p-3 text-[13px] text-[var(--text)]"
                     >
                       <span className="num inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[11px] font-semibold text-[var(--text)]">
                         {index + 1}
@@ -208,22 +227,22 @@ export function RunbookDrawer({
               </section>
             </>
           ) : (
-            <div className="rounded-[8px] border border-dashed border-[var(--control)] bg-[var(--raised)] p-4 text-[13px] text-[var(--muted)]">
+            <div className="rounded-[6px] border border-dashed border-[var(--control)] bg-[var(--raised)] p-4 text-[13px] text-[var(--muted)]">
               This runbook ID does not exist in the local read-only MCP catalog.
             </div>
           )}
 
           <section aria-label="SLA service budgets">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <h3 className="text-[12px] font-medium text-[var(--muted)]">
                 SLA p95 latency budgets
               </h3>
               <span className="num text-[12px] text-[var(--muted)]">
-                Default fallback: {formatMs(catalog.defaultBudgetMs)}
+                Fallback {formatMs(catalog.defaultBudgetMs)}
               </span>
             </div>
             <p className="mt-1 text-[12px] text-[var(--muted)]">
-              Severity calibration: within budget = low/medium, &gt;1x budget = high, &ge;2x budget =
+              Ratio calibration: within budget = low, &gt;1x = medium, &gt;=3x = high, &gt;=5x =
               critical.
             </p>
             <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -253,7 +272,7 @@ export function RunbookDrawer({
 
           <section aria-label="Linked evaluation scenarios">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <h3 className="text-[12px] font-medium text-[var(--muted)]">
                 Linked scenarios ({activeDatasetLabel})
               </h3>
               <span className="num text-[12px] text-[var(--muted)]">
@@ -262,7 +281,7 @@ export function RunbookDrawer({
             </div>
 
             {linkedScenarios.length === 0 ? (
-              <div className="mt-2 rounded-[8px] border border-dashed border-[var(--control)] bg-[var(--raised)] p-4 text-[13px] text-[var(--muted)]">
+              <div className="mt-2 rounded-[6px] border border-dashed border-[var(--control)] bg-[var(--raised)] p-4 text-[13px] text-[var(--muted)]">
                 No scenarios in {activeDatasetLabel} reference this runbook.
               </div>
             ) : (
@@ -275,7 +294,7 @@ export function RunbookDrawer({
                       restoreFocusOnCloseRef.current = false;
                       onSelectScenario(row.scenario_id);
                     }}
-                    className="flex w-full items-center justify-between gap-3 rounded-[8px] border border-[var(--border)] bg-[var(--raised)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--active)]"
+                    className="flex w-full items-center justify-between gap-3 rounded-[6px] border border-[var(--border)] bg-[var(--raised)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--active)]"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">

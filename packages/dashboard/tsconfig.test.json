@@ -20,6 +20,7 @@
     "src/lib/evalData.ts",
     "src/lib/triageCatalog.ts",
     "src/lib/triageEngine.ts",
+    "src/lib/triagePreview.ts",
     "tests/evalData.test.ts",
     "tests/triageEngine.test.ts"
   ]

@@ -22,7 +22,7 @@ const STEP_CANDIDATES = [
 ];
 
 function computeYScale(maxRaw: number): { yMax: number; ticks: readonly number[] } {
-  const safeMax = maxRaw > 0 ? maxRaw * 1.12 : 10;
+  const safeMax = maxRaw > 0 ? maxRaw * 1.18 : 10;
   const tickCount = 4;
   const roughStep = safeMax / tickCount;
   const step =
@@ -73,13 +73,13 @@ export function PairedEvalChart({
 
   const plotLeft = 48;
   const plotRight = 702;
-  const plotTop = 22;
-  const plotBottom = 216;
+  const plotTop = 34;
+  const plotBottom = 220;
   const plotWidth = plotRight - plotLeft;
   const plotHeight = plotBottom - plotTop;
 
   const slotWidth = rows.length > 0 ? plotWidth / rows.length : plotWidth;
-  const barWidth = Math.min(22, Math.max(3, slotWidth * 0.56));
+  const barWidth = Math.min(20, Math.max(3, slotWidth * 0.54));
   const baselineTickOverhang = Math.min(2, barWidth * 0.35);
   const labelStride = rows.length <= 25 ? 5 : Math.ceil(rows.length / 5);
 
@@ -92,8 +92,27 @@ export function PairedEvalChart({
     ? plotBottom - (latencyGateMs / yMax) * plotHeight
     : null;
 
+  // Identify peak MCP latency/token bar and first adversarial injection bar for leader annotations.
+  let peakIdx = -1;
+  let peakVal = -1;
+  let firstAdvIdx = -1;
+  rows.forEach((row, idx) => {
+    const val = activeMetric === "latency" ? row.tool_latency_ms : row.total_tokens;
+    if (val > peakVal) {
+      peakVal = val;
+      peakIdx = idx;
+    }
+    if (firstAdvIdx === -1 && row.is_adversarial_injection) {
+      firstAdvIdx = idx;
+    }
+  });
+
+  const peakRow = peakIdx >= 0 ? rows[peakIdx] : undefined;
+  const advRow =
+    firstAdvIdx >= 0 && Math.abs(firstAdvIdx - peakIdx) >= 3 ? rows[firstAdvIdx] : undefined;
+
   return (
-    <section className="flex h-full flex-col justify-between rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
+    <section className="flex h-full flex-col justify-between rounded-[6px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -102,59 +121,51 @@ export function PairedEvalChart({
                 ? "Per-scenario latency (MCP vs. baseline)"
                 : "Per-scenario token expenditure"}
             </h2>
-            <p className="mt-0.5 text-[13px] text-[var(--muted)]">
+            <p className="mt-0.5 text-[12px] text-[var(--muted)]">
               {activeMetric === "latency"
-                ? `Bars show MCP tool latency; tick marks show baseline latency. Gate ceiling <= ${formatMs(latencyGateMs)}.`
-                : "Total prompt plus completion tokens across MCP tool turns per scenario."}
+                ? `Bars plot MCP latency; horizontal ticks mark baseline. Gate floor <= ${formatMs(latencyGateMs)}.`
+                : "Total prompt plus completion tokens across MCP tool turns."}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {totalTokens > 0 && (
-              <div
-                className="inline-flex rounded-[6px] border border-[var(--border)] bg-[var(--raised)] p-0.5 text-[13px]"
-                role="group"
-                aria-label="Chart metric"
-              >
-                <button
-                  type="button"
-                  aria-pressed={activeMetric === "latency"}
-                  onClick={() => setMetric("latency")}
-                  className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
-                    activeMetric === "latency"
-                      ? "bg-[var(--active)] text-[var(--text)]"
-                      : "text-[var(--muted)] hover:text-[var(--text)]"
-                  }`}
-                >
-                  Latency
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={activeMetric === "tokens"}
-                  onClick={() => setMetric("tokens")}
-                  className={`rounded-[4px] px-2.5 py-1 font-medium transition-colors ${
-                    activeMetric === "tokens"
-                      ? "bg-[var(--active)] text-[var(--text)]"
-                      : "text-[var(--muted)] hover:text-[var(--text)]"
-                  }`}
-                >
-                  Tokens
-                </button>
-              </div>
-            )}
-          </div>
+          {totalTokens > 0 && (
+            <div
+              className="inline-flex border-b border-[var(--border)] text-[13px]"
+              role="group"
+              aria-label="Chart metric"
+            >
+              {(["latency", "tokens"] as const).map((mode) => {
+                const selected = activeMetric === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setMetric(mode)}
+                    className={`border-b px-3 py-1.5 font-medium capitalize transition-colors ${
+                      selected
+                        ? "border-[var(--accent)] text-[var(--text)]"
+                        : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[6px] border border-[var(--rule)] bg-[var(--raised)] px-3 py-2 text-[13px]">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-y border-[var(--rule)] py-2 text-[12px]">
           {activeRow ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <code className="font-medium text-[var(--accent)]">{activeRow.scenario_id}</code>
-              <span className="text-[var(--text)]">{activeRow.title}</span>
+              <span className="font-medium text-[var(--text)]">{activeRow.title}</span>
               <span className="num text-[var(--text)]">
                 MCP {formatMs(activeRow.tool_latency_ms)} ({activeRow.tool_passed ? "pass" : "fail"})
               </span>
               <span className="num text-[var(--muted)]">
-                Baseline {formatMs(activeRow.baseline_latency_ms)} (
+                Base {formatMs(activeRow.baseline_latency_ms)} (
                 {activeRow.baseline_passed ? "pass" : "fail"})
               </span>
               {activeRow.total_tokens > 0 && (
@@ -164,20 +175,20 @@ export function PairedEvalChart({
               )}
             </div>
           ) : (
-            <span className="text-[var(--muted)]">No scenario telemetry available.</span>
+            <span className="text-[var(--muted)]">No scenario telemetry loaded.</span>
           )}
 
-          <div className="flex flex-wrap items-center gap-4 text-[12px] text-[var(--muted)]">
+          <div className="flex flex-wrap items-center gap-3 text-[12px] text-[var(--muted)]">
             <span className="inline-flex items-center gap-1.5">
               <span
-                className="inline-block h-2.5 w-2.5 rounded-[2px]"
+                className="inline-block h-2 w-2 rounded-[1px]"
                 style={{ backgroundColor: "var(--chart-1)" }}
               />
               MCP pass
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span
-                className="inline-block h-2.5 w-2.5 rounded-[2px]"
+                className="inline-block h-2 w-2 rounded-[1px]"
                 style={{ backgroundColor: "var(--negative)" }}
               />
               MCP fail
@@ -191,19 +202,13 @@ export function PairedEvalChart({
                 Baseline
               </span>
             )}
-            {showGateLine && (
-              <span className="inline-flex items-center gap-1.5 text-[var(--warning)]">
-                <span className="inline-block w-3 border-t border-dashed border-[var(--warning)]" />
-                Gate {formatMs(latencyGateMs)}
-              </span>
-            )}
           </div>
         </div>
       </div>
 
       <div className="mt-3 w-full">
         <svg
-          viewBox="0 0 720 246"
+          viewBox="0 0 720 250"
           className="h-auto w-full select-none"
           role="img"
           aria-label="Per-scenario evaluation comparison chart"
@@ -218,8 +223,8 @@ export function PairedEvalChart({
                   x2={plotRight}
                   y1={y}
                   y2={y}
-                  stroke={isBaseline ? "var(--border-strong)" : "var(--rule)"}
-                  strokeWidth={1}
+                  stroke={isBaseline ? "var(--border-strong)" : "var(--grid)"}
+                  strokeWidth={isBaseline ? 1.5 : 1}
                 />
                 <text
                   x={plotLeft - 8}
@@ -236,15 +241,104 @@ export function PairedEvalChart({
           })}
 
           {gateY !== null && (
-            <line
-              x1={plotLeft}
-              x2={plotRight}
-              y1={gateY}
-              y2={gateY}
-              stroke="var(--warning)"
-              strokeWidth={1.25}
-              strokeDasharray="4 4"
-            />
+            <g>
+              <line
+                x1={plotLeft}
+                x2={plotRight}
+                y1={gateY}
+                y2={gateY}
+                stroke="var(--warning)"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+              />
+              <text
+                x={plotRight - 2}
+                y={Math.max(plotTop + 10, gateY - 5)}
+                textAnchor="end"
+                fontSize="11"
+                fill="var(--warning)"
+                className="num"
+              >
+                Gate {formatMs(latencyGateMs)}
+              </text>
+            </g>
+          )}
+
+          {/* Peak & adversarial 1px annotation leader lines */}
+          {peakRow && rows.length <= 32 && (
+            <g aria-hidden="true">
+              {(() => {
+                const cx = plotLeft + slotWidth * (peakIdx + 0.5);
+                const val =
+                  activeMetric === "latency" ? peakRow.tool_latency_ms : peakRow.total_tokens;
+                const barTopY = plotBottom - Math.max(2, (val / yMax) * plotHeight);
+                const labelY = 14;
+                const anchor = cx > plotRight - 140 ? "end" : "start";
+                const textX = anchor === "end" ? cx - 6 : cx + 6;
+                return (
+                  <g>
+                    <line
+                      x1={cx}
+                      x2={cx}
+                      y1={labelY + 4}
+                      y2={Math.max(labelY + 4, barTopY - 3)}
+                      stroke="var(--border-strong)"
+                      strokeWidth={1}
+                    />
+                    <text
+                      x={textX}
+                      y={labelY}
+                      textAnchor={anchor}
+                      fontSize="11"
+                      fill="var(--text)"
+                      className="num"
+                    >
+                      Peak {peakRow.scenario_id} (
+                      {activeMetric === "latency"
+                        ? formatMs(peakRow.tool_latency_ms)
+                        : `${formatInt(peakRow.total_tokens)} tok`}
+                      )
+                    </text>
+                  </g>
+                );
+              })()}
+            </g>
+          )}
+
+          {advRow && firstAdvIdx >= 0 && rows.length <= 32 && (
+            <g aria-hidden="true">
+              {(() => {
+                const cx = plotLeft + slotWidth * (firstAdvIdx + 0.5);
+                const val =
+                  activeMetric === "latency" ? advRow.tool_latency_ms : advRow.total_tokens;
+                const barTopY = plotBottom - Math.max(2, (val / yMax) * plotHeight);
+                const labelY = 26;
+                const anchor = cx < plotLeft + 110 ? "start" : "end";
+                const textX = anchor === "start" ? cx + 6 : cx - 6;
+                return (
+                  <g>
+                    <line
+                      x1={cx}
+                      x2={cx}
+                      y1={labelY + 4}
+                      y2={Math.max(labelY + 4, barTopY - 3)}
+                      stroke="var(--border-strong)"
+                      strokeWidth={1}
+                    />
+                    <text
+                      x={textX}
+                      y={labelY}
+                      textAnchor={anchor}
+                      fontSize="11"
+                      fill="var(--muted)"
+                      className="num"
+                    >
+                      {advRow.scenario_id} probe {advRow.injection_blocked ? "blocked" : "exposed"}
+                    </text>
+                  </g>
+                );
+              })()}
+            </g>
           )}
 
           {rows.map((row, idx) => {
@@ -306,8 +400,6 @@ export function PairedEvalChart({
                   y={barY}
                   width={barWidth}
                   height={barHeight}
-                  rx={2}
-                  ry={2}
                   fill={fill}
                   opacity={isSelected ? 1 : 0.85}
                 />

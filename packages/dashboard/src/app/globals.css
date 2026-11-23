@@ -2,76 +2,82 @@
 
 :root,
 [data-theme="dark"] {
-  --font-sans: "IBM Plex Sans";
-  --font-mono: "IBM Plex Mono";
-  --ground: #090d12;
-  --surface: #0f151d;
-  --raised: #151d28;
-  --active: #1b2636;
-  --border: #1f2b3a;
-  --border-strong: #2d3d52;
-  --rule: #182230;
-  --control: #2d3d52;
-  --text: #e8eef6;
-  --muted: #8b9cb3;
-  --faint: #8b9bb4;
-  --primary: #38bdf8;
-  --primary-ink: #04131c;
-  --accent: #38bdf8;
-  --accent-strong: #7dd3fc;
-  --accent-hover: #7dd3fc;
-  --accent-soft: rgba(56, 189, 248, 0.13);
-  --positive: #34d399;
-  --negative: #f87171;
-  --warning: #fbbf24;
-  --chart-1: #38bdf8;
-  --chart-2: #8b9bb4;
-  --pill-positive-bg: rgba(52, 211, 153, 0.14);
-  --pill-positive-ink: #6ee7b7;
-  --pill-negative-bg: rgba(248, 113, 113, 0.15);
-  --pill-negative-ink: #fca5a5;
-  --pill-warning-bg: rgba(251, 191, 36, 0.14);
-  --pill-warning-ink: #fcd34d;
-  --pill-accent-bg: rgba(56, 189, 248, 0.14);
-  --pill-accent-ink: #7dd3fc;
-  --pill-neutral-bg: rgba(139, 156, 179, 0.14);
-  --pill-neutral-ink: #cbd5e1;
+  /* Dealt from taste-skill app sheet: data-terminal (seed 283307436) */
+  --font-sans: "Public Sans";
+  --font-mono: "IBM Plex Mono"; /* taste-skill-ignore */
+  --ground: #171719;
+  --surface: #131217;
+  --raised: #212023;
+  --active: #27262b;
+  --border: #222224;
+  --border-strong: #3a3a3e;
+  --rule: #1b1a1f;
+  --control: #3a3a3e;
+  --text: #ffffff;
+  --muted: #8a8c92;
+  --faint: #989aa0;
+  --primary: #ffffff;
+  --primary-ink: #131217;
+  --accent: #4a8ad6;
+  --accent-strong: #6aa4e8;
+  --accent-hover: #6aa4e8;
+  --accent-soft: rgba(74, 138, 214, 0.12);
+  --positive: #5fc39c;
+  --negative: #e5566f;
+  --warning: #d9a441;
+  --chart-1: #4a8ad6;
+  --chart-2: #e5566f;
+  --chart-3: #d9a441;
+  --grid: #2b2b2b;
+  --pill-positive-bg: #1b2828;
+  --pill-positive-ink: #5fc39c;
+  --pill-negative-bg: #2c1a20;
+  --pill-negative-ink: #e5566f;
+  --pill-warning-bg: #2a2416;
+  --pill-warning-ink: #d9a441;
+  --pill-accent-bg: #192434;
+  --pill-accent-ink: #7eb2ef;
+  --pill-neutral-bg: #212023;
+  --pill-neutral-ink: #bdbdc0;
   color-scheme: dark;
 }
 
 [data-theme="light"] {
-  --ground: #f1f5f9;
+  /* Dealt from taste-skill app sheet: framed-sheet (seed 16722143) */
+  --ground: #f9fbfc;
   --surface: #ffffff;
-  --raised: #f8fafc;
-  --active: #e2ecf5;
-  --border: #dbe3ec;
-  --border-strong: #c3cedb;
-  --rule: #e8edf3;
-  --control: #c3cedb;
-  --text: #0f172a;
-  --muted: #475569;
-  --faint: #57677d;
-  --primary: #0f172a;
+  --raised: #f4f6f8;
+  --active: #ebedee;
+  --border: #e8eaec;
+  --border-strong: #cdced1;
+  --rule: #f0f1f2;
+  --control: #cdced1;
+  --text: #131416;
+  --muted: #5d5f60;
+  --faint: #66686a;
+  --primary: #131416;
   --primary-ink: #ffffff;
-  --accent: #0369a1;
-  --accent-strong: #075985;
-  --accent-hover: #075985;
-  --accent-soft: rgba(3, 105, 161, 0.07);
-  --positive: #047857;
-  --negative: #b91c1c;
-  --warning: #b45309;
-  --chart-1: #0369a1;
-  --chart-2: #57677d;
-  --pill-positive-bg: #dcfce7;
-  --pill-positive-ink: #14532d;
-  --pill-negative-bg: #fee2e2;
-  --pill-negative-ink: #7f1d1d;
-  --pill-warning-bg: #fef3c7;
-  --pill-warning-ink: #78350f;
-  --pill-accent-bg: #e0f2fe;
-  --pill-accent-ink: #0c4a6e;
-  --pill-neutral-bg: #e2e8f0;
-  --pill-neutral-ink: #334155;
+  --accent: #1b6c80;
+  --accent-strong: #155666;
+  --accent-hover: #155666;
+  --accent-soft: rgba(27, 108, 128, 0.08);
+  --positive: #1e7b4f;
+  --negative: #c4242a;
+  --warning: #92400e;
+  --chart-1: #1b6c80;
+  --chart-2: #2f70bb;
+  --chart-3: #a86f0c;
+  --grid: #e5e5e5;
+  --pill-positive-bg: #dcfae5;
+  --pill-positive-ink: #04250e;
+  --pill-negative-bg: #ffedea;
+  --pill-negative-ink: #831c1e;
+  --pill-warning-bg: #fffbeb;
+  --pill-warning-ink: #92400e;
+  --pill-accent-bg: #e4f1f4;
+  --pill-accent-ink: #124c5a;
+  --pill-neutral-bg: #ebedee;
+  --pill-neutral-ink: #353736;
   color-scheme: light;
 }
 
@@ -86,7 +92,7 @@ body {
 code,
 pre,
 .code-id {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-mono), ui-monospace, monospace; /* taste-skill-ignore */
 }
 
 .num {
@@ -101,7 +107,7 @@ pre,
 @keyframes stage-enter {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -110,7 +116,7 @@ pre,
 }
 
 .stage-reveal {
-  animation: stage-enter 160ms ease-out both;
+  animation: stage-enter 140ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {

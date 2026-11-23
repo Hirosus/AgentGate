@@ -11,6 +11,14 @@ import {
   parseUploadedReport,
   type EvalScenario,
 } from "../src/lib/evalData";
+import { TRIAGE_PRESETS } from "../src/lib/triageCatalog";
+import {
+  buildPresetInitialPreview,
+  buildTriagePreview,
+  formatPythonSdkSnippet,
+  formatSignedCurlCommand,
+  getServiceSlaInfo,
+} from "../src/lib/triagePreview";
 
 function makeValidReportPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -251,5 +259,43 @@ describe("evalData parsing, metrics, and validation", () => {
       isUploaded: true,
     });
     assert.equal(fallbackChecks.some((c) => !c.passed), true);
+  });
+
+  it("models pre-hydrated preview snapshots, SLA track math, and wire snippets safely", () => {
+    const sla = getServiceSlaInfo("checkout-api", 820);
+    assert.equal(sla.budgetMs, 250);
+    assert.equal(sla.breached, true);
+    assert.equal(sla.bandSeverity, "high");
+    assert.equal(sla.ratio, 3.28);
+
+    const ctorSla = getServiceSlaInfo("constructor", 120);
+    assert.equal(ctorSla.service, "constructor");
+    assert.equal(ctorSla.budgetMs, 500);
+    assert.equal(ctorSla.breached, false);
+
+    const initial = buildPresetInitialPreview(TRIAGE_PRESETS[0]!);
+    assert.equal(initial.stages.length, 5);
+    assert.equal(initial.mcpOutput?.recommendedRunbook, "rb-latency-pool");
+    assert.equal(initial.claimedKeyCount, 0);
+
+    const tampered = buildTriagePreview({
+      service: "checkout-api",
+      p95Ms: 820,
+      payloadText: TRIAGE_PRESETS[0]!.payloadText,
+      idempotencyKey: "evt-test-diff",
+      fault: "tamper_body",
+      mode: "deterministic_mcp",
+      liveAiConfigured: true,
+      claimedKeyCount: 1,
+    });
+    assert.notEqual(tampered.requestEnvelope.rawBody, tampered.requestEnvelope.wireBody);
+
+    const curl = formatSignedCurlCommand(initial, "https://agentgate.example.com/");
+    assert.ok(curl.includes("https://agentgate.example.com/webhooks/triage"));
+    assert.ok(curl.includes("X-AgentGate-Signature: v2="));
+
+    const py = formatPythonSdkSnippet(initial, "checkout-api", 820, "Alert latency 820ms");
+    assert.ok(py.includes("AgentGateClient"));
+    assert.ok(py.includes("send_signed_webhook"));
   });
 });

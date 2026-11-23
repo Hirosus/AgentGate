@@ -9,9 +9,14 @@ import {
 interface ScenarioDetailPanelProps {
   readonly row: MergedCaseRow;
   readonly onClose: () => void;
+  readonly onLoadInWorkbench?: (row: MergedCaseRow) => void;
 }
 
-export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) {
+export function ScenarioDetailPanel({
+  row,
+  onClose,
+  onLoadInWorkbench,
+}: ScenarioDetailPanelProps) {
   const toolRunbookMismatch =
     row.expected_severity !== null
       ? row.tool_runbook !== row.expected_runbook
@@ -20,7 +25,7 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
   return (
     <aside
       aria-label={`Details for ${row.scenario_id}`}
-      className="rounded-[10px] border border-[var(--border-strong)] bg-[var(--surface)] p-5"
+      className="rounded-[6px] border border-[var(--border-strong)] bg-[var(--surface)] p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -56,13 +61,24 @@ export function ScenarioDetailPanel({ row, onClose }: ScenarioDetailPanelProps) 
           <h3 className="mt-2 text-[16px] font-semibold text-[var(--text)]">{row.title}</h3>
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-8 rounded-[6px] border border-[var(--control)] bg-[var(--raised)] px-3 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--active)]"
-        >
-          Close
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onLoadInWorkbench && (
+            <button
+              type="button"
+              onClick={() => onLoadInWorkbench(row)}
+              className="h-8 rounded-[6px] bg-[var(--primary)] px-3 text-[12px] font-medium text-[var(--primary-ink)] transition-opacity hover:opacity-90"
+            >
+              Load in workbench
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 rounded-[6px] border border-[var(--control)] bg-[var(--surface)] px-3 text-[12px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--raised)]"
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">

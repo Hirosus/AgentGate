@@ -1,6 +1,7 @@
-import "@fontsource/ibm-plex-sans/400.css";
-import "@fontsource/ibm-plex-sans/500.css";
-import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/public-sans/400.css";
+import "@fontsource/public-sans/500.css";
+import "@fontsource/public-sans/600.css";
+import "@fontsource/public-sans/700.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import type { Metadata } from "next";
@@ -10,7 +11,7 @@ import "./globals.css";
 const THEME_INIT_SCRIPT = `(function(){try{var t=window.localStorage.getItem("agentgate-theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}})();`;
 
 export const metadata: Metadata = {
-  title: "AgentGate — Incident Triage & Eval Operations Console",
+  title: "AgentGate: Incident Triage & Eval Operations Console",
   description:
     "Live HMAC-SHA256 v2 webhook verification, atomic idempotency defense, read-only MCP diagnostic execution, and automated CI eval benchmarking.",
 };

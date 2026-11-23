@@ -1132,7 +1132,7 @@ export async function runGeminiMcpTriage(
     for (let turn = 0; turn < MAX_TOOL_TURNS; turn += 1) {
       const remainingMs = deadlineMs - Date.now();
       if (remainingMs < 1000) {
-        return fallbackWith("Live AI exceeded request time budget — fell back to deterministic MCP.");
+        return fallbackWith("Live AI exceeded request time budget; fell back to deterministic MCP.");
       }
 
       const response = await fetch(endpointUrl, {
@@ -1153,8 +1153,8 @@ export async function runGeminiMcpTriage(
       if (!response.ok) {
         const reason =
           response.status === 429
-            ? "Live AI rate-limited upstream (429) — fell back to deterministic MCP."
-            : `Live AI returned HTTP ${response.status} — fell back to deterministic MCP.`;
+            ? "Live AI rate-limited upstream (429); fell back to deterministic MCP."
+            : `Live AI returned HTTP ${response.status}; fell back to deterministic MCP.`;
         return fallbackWith(reason);
       }
 
@@ -1252,7 +1252,7 @@ export async function runGeminiMcpTriage(
       );
       if (compromised) {
         return fallbackWith(
-          "Live AI output triggered post-generation injection guard — reverted to deterministic MCP.",
+          "Live AI output triggered post-generation injection guard; reverted to deterministic MCP.",
         );
       }
 
@@ -1283,8 +1283,8 @@ export async function runGeminiMcpTriage(
       };
     }
   } catch {
-    return fallbackWith("Live AI request timed out or failed — fell back to deterministic MCP.");
+    return fallbackWith("Live AI request timed out or failed; fell back to deterministic MCP.");
   }
 
-  return fallbackWith("Live AI exceeded tool turns or returned invalid JSON — fell back to deterministic MCP.");
+  return fallbackWith("Live AI exceeded tool turns or returned invalid JSON; fell back to deterministic MCP.");
 }

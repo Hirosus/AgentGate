@@ -79,8 +79,8 @@ export function CommandPalette({
       {
         id: "view-triage",
         group: "Views",
-        label: "Live Triage Workbench",
-        subtitle: "Dispatch signed webhooks, inspect 5-stage pipeline and MCP tool traces",
+        label: "Incident Triage Workbench",
+        subtitle: "Dispatch v2-signed webhooks, inspect 5-stage pipeline and MCP tool calls",
         badge: "View",
         keywords: "live triage webhook hmac idempotency workbench",
         run: () => onSwitchView("triage"),
@@ -97,7 +97,7 @@ export function CommandPalette({
       {
         id: "view-security",
         group: "Views",
-        label: "Runbooks & Security Audit",
+        label: "Runbook Catalog & Security",
         subtitle: "Inspect MCP runbooks, SLA budgets, and adversarial injection probes",
         badge: "View",
         keywords: "runbooks security prompt injection audit",
@@ -106,7 +106,7 @@ export function CommandPalette({
       {
         id: "toggle-theme",
         group: "Appearance",
-        label: theme === "dark" ? "Switch to Light mode" : "Switch to Dark mode",
+        label: theme === "dark" ? "Switch to Framed Sheet (Light)" : "Switch to Data Terminal (Dark)",
         subtitle: "Persist console theme preference in localStorage",
         badge: "Theme",
         keywords: "theme dark light appearance contrast",
@@ -119,7 +119,7 @@ export function CommandPalette({
       group: "Triage Presets",
       label: preset.label,
       subtitle: `${preset.service} · ${preset.expectedNote}`,
-      badge: preset.isAdversarial ? "Bait Preset" : "Preset",
+      badge: preset.isAdversarial ? "Bait" : "Preset",
       keywords: `${preset.id} ${preset.service} ${preset.label} ${preset.expectedNote}`,
       run: () => onLoadPreset(preset.id),
     }));
@@ -129,7 +129,7 @@ export function CommandPalette({
       .map(([symptomTag, runbook]) => ({
         id: `runbook-${runbook.runbookId}`,
         group: "MCP Runbooks",
-        label: `${runbook.runbookId} — ${runbook.title}`,
+        label: `${runbook.runbookId}: ${runbook.title}`,
         subtitle: `${symptomTag} · ${
           Object.hasOwn(catalog.symptomDescriptions, symptomTag)
             ? catalog.symptomDescriptions[symptomTag] ?? ""
@@ -143,7 +143,7 @@ export function CommandPalette({
     const scenarioItems: PaletteItem[] = scenarios.map((row) => ({
       id: `scenario-${row.scenario_id}`,
       group: `Eval Scenarios (${activeDatasetLabel})`,
-      label: `${row.scenario_id} — ${row.title}`,
+      label: `${row.scenario_id}: ${row.title}`,
       subtitle: `${row.expected_runbook ?? "no runbook"} · ${row.tool_passed ? "MCP pass" : "MCP fail"}`,
       badge: row.is_adversarial_injection ? "Adversarial" : "Scenario",
       keywords: `${row.scenario_id} ${row.title} ${row.expected_runbook ?? ""} ${row.tool_runbook ?? ""}`,
@@ -202,7 +202,7 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[10vh] backdrop-blur-[1px]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[10vh]"
       onClick={dismissPalette}
     >
       <div
@@ -230,7 +230,7 @@ export function CommandPalette({
             executeItem(activeItem);
           }
         }}
-        className="w-full max-w-xl overflow-hidden rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl"
+        className="w-full max-w-xl overflow-hidden rounded-[8px] border border-[var(--border-strong)] bg-[var(--surface)]"
       >
         <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
           <label htmlFor="command-palette-input" className="sr-only">
@@ -275,7 +275,7 @@ export function CommandPalette({
               return (
                 <div key={item.id}>
                   {showGroupHeader && (
-                    <div className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    <div className="px-2.5 pb-1 pt-2 text-[11px] font-medium text-[var(--muted)]">
                       {item.group}
                     </div>
                   )}
@@ -293,7 +293,7 @@ export function CommandPalette({
                     aria-selected={selected}
                     onMouseEnter={() => setActiveIndex(idx)}
                     onClick={() => executeItem(item)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-[8px] px-3 py-2 text-left transition-colors ${
+                    className={`flex w-full items-center justify-between gap-3 rounded-[6px] px-3 py-2 text-left transition-colors ${
                       selected ? "bg-[var(--active)]" : "hover:bg-[var(--raised)]"
                     }`}
                   >
@@ -318,7 +318,7 @@ export function CommandPalette({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--rule)] bg-[var(--raised)] px-4 py-2 text-[11px] text-[var(--muted)]">
-          <span>↑↓ Navigate · Enter Execute · Esc Close</span>
+          <span>Up/Down Navigate · Enter Execute · Esc Close</span>
           <span className="num">{filteredItems.length} commands</span>
         </div>
       </div>
